@@ -258,9 +258,14 @@ class FarcasterAutoShareLike:
             print(f"{colored_text(f'⚠️  Account {self.account_index}: Analysis error: {e}', Colors.YELLOW)}")
             return True
 
-    def generate_share_text(self, share_number=1):
+    def generate_share_text(self, share_number=1, use_original_only=False):
         """Generate varied text for shares"""
+        if use_original_only:
+            # Only use the original text
+            return "Help me get Fuel by liking this cast!\n5 Likes = 1 Fuel🔋\nSupport my mech battles in Wreck League Versus 🤖 by @towerecosystem"
+        
         base_texts = [
+            "Help me get Fuel by liking this cast!\n5 Likes = 1 Fuel🔋\nSupport my mech battles in Wreck League Versus 🤖 by @towerecosystem",
             "Help me get Fuel by liking this cast! 🔋\n5 Likes = 1 Fuel\nSupport my mech battles in Wreck League Versus 🤖",
             "Need fuel for my mech! ⚡\nLike this cast to help me fight in Wreck League! 🤖\n5 likes = 1 fuel ⛽",
             "Powering up my mech for battle! 🚀\nYour like = My fuel ⛽\nJoin the Wreck League action! 🤖",
@@ -296,7 +301,7 @@ class FarcasterAutoShareLike:
             
         return final_text
 
-    def post_share_cast(self, share_number=1, custom_text=None):
+    def post_share_cast(self, share_number=1, custom_text=None, use_original_only=False):
         """Post a promotional cast to get likes"""
         try:
             url = "https://client.farcaster.xyz/v2/casts"
@@ -305,7 +310,7 @@ class FarcasterAutoShareLike:
             if custom_text:
                 cast_text = custom_text
             else:
-                cast_text = self.generate_share_text(share_number)
+                cast_text = self.generate_share_text(share_number, use_original_only)
             
             # Prepare payload with embed
             payload = {
@@ -448,36 +453,7 @@ class FarcasterAutoShareLike:
             print(f"{colored_text(f'❌ Account {self.account_index}: Error in like_shares_from_others: {e}', Colors.RED)}")
             return 0
 
-    def claim_fuel_reward(self):
-        """Claim fuel reward after getting enough likes"""
-        try:
-            if not self.user_id:
-                return False
-                
-            url = f"https://versus-prod-api.wreckleague.xyz/v1/user/fuelReward?fId={self.user_id}"
-            
-            headers = {
-                "Authorization": f"Bearer {self.authorization_token}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
-            
-            print(f"{colored_text(f'⛽ Account {self.account_index}: Claiming fuel reward...', Colors.YELLOW)}")
-            response = requests.post(url, headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                print(f"{colored_text(f'✅ Account {self.account_index}: Fuel reward claimed successfully!', Colors.GREEN)}")
-                return True
-            else:
-                print(f"{colored_text(f'❌ Account {self.account_index}: Failed to claim fuel (Status: {response.status_code})', Colors.RED)}")
-                return False
-                
-        except Exception as e:
-            print(f"{colored_text(f'❌ Account {self.account_index}: Error claiming fuel: {e}', Colors.RED)}")
-            return False
-
-    def run_share_cycle(self, num_shares=5, delay_range=(10, 30)):
+    def run_share_cycle(self, num_shares=5, delay_range=(10, 30), use_original_only=False):
         """Run a complete share cycle for this account"""
         try:
             if shutdown_flag.is_set():
@@ -496,7 +472,7 @@ class FarcasterAutoShareLike:
                 if shutdown_flag.is_set():
                     break
                     
-                share_result = self.post_share_cast(i)
+                share_result = self.post_share_cast(i, use_original_only=use_original_only)
                 shares_data.append(share_result)
                 
                 # Delay between shares (except for last one)
@@ -542,7 +518,7 @@ def load_authorization_tokens(file_path="account.txt"):
         print(f"{colored_text(f'❌ Error loading tokens: {e}', Colors.RED)}")
         return []
 
-def process_account_shares(account_info, num_shares, delay_range, results_queue):
+def process_account_shares(account_info, num_shares, delay_range, use_original_only, results_queue):
     """Process shares for a single account in thread"""
     try:
         account_index = account_info['index']
@@ -553,8 +529,8 @@ def process_account_shares(account_info, num_shares, delay_range, results_queue)
         # Initialize bot instance
         bot = FarcasterAutoShareLike(token, account_index)
         
-        # Run share cycle
-        shares_data = bot.run_share_cycle(num_shares, delay_range)
+        # Run share cycle with original text option
+        shares_data = bot.run_share_cycle(num_shares, delay_range, use_original_only)
         
         result = {
             'account_index': account_index,
@@ -611,7 +587,7 @@ def process_account_likes(bot_instance, all_shares_data, delay_range, results_qu
         print(f"{colored_text(f'❌ [Like-Thread-{bot_instance.account_index}] Error: {e}', Colors.RED)}")
         return error_result
 
-def threaded_share_like_process(account_info_list, num_shares=5, share_delay_range=(10, 30), like_delay_range=(2, 5)):
+def threaded_share_like_process(account_info_list, num_shares=5, share_delay_range=(10, 30), like_delay_range=(2, 5), use_original_only=False):
     """Main threaded process for share + like automation"""
     try:
         print(f"\n{colored_text('🚀 STARTING THREADED SHARE + LIKE PROCESS', Colors.BOLD + Colors.CYAN)}")
@@ -621,6 +597,11 @@ def threaded_share_like_process(account_info_list, num_shares=5, share_delay_ran
         print(f"\n{colored_text('📝 PHASE 1: SHARE POSTING', Colors.BOLD + Colors.MAGENTA)}")
         print(f"{colored_text(f'🧵 Starting {len(account_info_list)} share threads...', Colors.MAGENTA)}")
         
+        if use_original_only:
+            print(f"{colored_text('📝 Using ORIGINAL cast text only', Colors.YELLOW)}")
+        else:
+            print(f"{colored_text('📝 Using VARIED cast texts', Colors.YELLOW)}")
+        
         share_results_queue = queue.Queue()
         all_bot_instances = []
         all_shares_data = []
@@ -628,7 +609,7 @@ def threaded_share_like_process(account_info_list, num_shares=5, share_delay_ran
         with ThreadPoolExecutor(max_workers=len(account_info_list)) as executor:
             # Submit share tasks
             share_futures = [
-                executor.submit(process_account_shares, acc_info, num_shares, share_delay_range, share_results_queue)
+                executor.submit(process_account_shares, acc_info, num_shares, share_delay_range, use_original_only, share_results_queue)
                 for acc_info in account_info_list
             ]
             
@@ -714,20 +695,6 @@ def threaded_share_like_process(account_info_list, num_shares=5, share_delay_ran
             print(f"  👍 Likes given: {bot.likes_given}")
             print(f"  🎯 Shares liked: {bot.shares_liked}")
         
-        # Phase 3: Fuel claiming (optional)
-        print(f"\n{colored_text('⛽ PHASE 3: FUEL CLAIMING', Colors.BOLD + Colors.GREEN)}")
-        claim_fuel = input(f"{colored_text('Claim fuel rewards for all accounts? (y/n): ', Colors.YELLOW)}").strip().lower()
-        
-        if claim_fuel in ['y', 'yes']:
-            print(f"{colored_text('⛽ Claiming fuel for all accounts...', Colors.GREEN)}")
-            
-            for bot in all_bot_instances:
-                try:
-                    bot.claim_fuel_reward()
-                    time.sleep(2)  # Small delay between claims
-                except Exception as e:
-                    print(f"{colored_text(f'❌ Account {bot.account_index}: Fuel claim error: {e}', Colors.RED)}")
-        
         print(f"\n{colored_text('🎉 SHARE + LIKE AUTOMATION COMPLETED!', Colors.BOLD + Colors.GREEN)}")
         print(f"{colored_text('═' * 70, Colors.GREEN)}")
         
@@ -736,7 +703,7 @@ def threaded_share_like_process(account_info_list, num_shares=5, share_delay_ran
     except Exception as e:
         print(f"\n{colored_text(f'❌ Unexpected error: {e}', Colors.RED)}")
 
-def cycle_based_share_like_automation(account_info_list, num_shares=5, share_delay_range=(10, 30), like_delay_range=(2, 5), cycles=5, cycle_delay=300):
+def cycle_based_share_like_automation(account_info_list, num_shares=5, share_delay_range=(10, 30), like_delay_range=(2, 5), cycles=5, cycle_delay=300, use_original_only=False):
     """Run cycle-based share + like automation: each cycle = share + like complete"""
     try:
         print(f"\n{colored_text('🔄 CYCLE-BASED SHARE + LIKE AUTOMATION', Colors.BOLD + Colors.CYAN)}")
@@ -788,7 +755,7 @@ def cycle_based_share_like_automation(account_info_list, num_shares=5, share_del
                     
                     # Submit share tasks
                     share_futures = [
-                        executor.submit(process_account_shares, acc_info, num_shares, share_delay_range, share_results_queue)
+                        executor.submit(process_account_shares, acc_info, num_shares, share_delay_range, use_original_only, share_results_queue)
                         for acc_info in cycle_account_info
                     ]
                     
@@ -889,20 +856,6 @@ def cycle_based_share_like_automation(account_info_list, num_shares=5, share_del
             print(f"  👍 Total likes given: {bot.likes_given}")
             print(f"  🎯 Total shares liked: {bot.shares_liked}")
         
-        # Optional fuel claiming
-        print(f"\n{colored_text('⛽ FINAL FUEL CLAIMING', Colors.BOLD + Colors.GREEN)}")
-        claim_fuel = input(f"{colored_text('Claim fuel rewards for all accounts? (y/n): ', Colors.YELLOW)}").strip().lower()
-        
-        if claim_fuel in ['y', 'yes']:
-            print(f"{colored_text('⛽ Claiming fuel for all accounts...', Colors.GREEN)}")
-            
-            for bot in all_bot_instances:
-                try:
-                    bot.claim_fuel_reward()
-                    time.sleep(2)
-                except Exception as e:
-                    print(f"{colored_text(f'❌ Account {bot.account_index}: Fuel claim error: {e}', Colors.RED)}")
-        
     except KeyboardInterrupt:
         print(f"\n{colored_text('⛔ Cycle-based automation stopped by user', Colors.RED)}")
     except Exception as e:
@@ -964,7 +917,6 @@ def main():
         "║  📝 Auto Share Posts with Custom Text Variations               ║",
         "║  👍 Cross-Account Automatic Liking System                      ║", 
         "║  🧵 Multi-Threading for Maximum Performance                     ║",
-        "║  ⛽ Auto Fuel Management & Rewards Claiming                     ║",
         "║  🔄 Continuous Automation with Smart Delays                    ║",
         "║  🛡️ Advanced Anti-Detection & Proxy Support                   ║",
         "╚══════════════════════════════════════════════════════════════════╝"
@@ -1046,6 +998,20 @@ def main():
         print(f"\n{colored_text('⚙️  SINGLE PROCESS CONFIGURATION', Colors.BOLD + Colors.MAGENTA)}")
         
         try:
+            # Ask about original cast text option
+            while True:
+                original_choice = input(f"{colored_text('📝 Use ORIGINAL cast text only? (y/n): ', Colors.CYAN)}").strip().lower()
+                if original_choice in ['y', 'yes']:
+                    use_original_only = True
+                    print(f"{colored_text('✅ Will use ORIGINAL cast text only', Colors.GREEN)}")
+                    break
+                elif original_choice in ['n', 'no']:
+                    use_original_only = False
+                    print(f"{colored_text('✅ Will use VARIED cast texts', Colors.GREEN)}")
+                    break
+                else:
+                    print(f"{colored_text('❌ Please enter y or n', Colors.RED)}")
+            
             num_shares = int(input(f"{colored_text('📝 Number of shares per account: ', Colors.CYAN)}") or "3")
             num_shares = max(1, num_shares)
             
@@ -1059,19 +1025,21 @@ def main():
             
         except ValueError:
             print(f"{colored_text('⚠️  Invalid input, using defaults', Colors.YELLOW)}")
+            use_original_only = False
             num_shares = 3
             share_delay_range = (10, 30)
             like_delay_range = (2, 5)
         
         print(f"\n{colored_text('✅ CONFIGURATION SUMMARY', Colors.GREEN)}")
         print(f"  📝 Shares per account: {num_shares}")
+        print(f"  📝 Original text only: {'Yes' if use_original_only else 'No'}")
         print(f"  ⏳ Share delay: {share_delay_range[0]}-{share_delay_range[1]}s")
         print(f"  👍 Like delay: {like_delay_range[0]}-{like_delay_range[1]}s")
         print(f"  👥 Total accounts: {len(account_info)}")
         
         confirm = input(f"\n{colored_text('Start process? (y/n): ', Colors.BOLD + Colors.YELLOW)}").strip().lower()
         if confirm in ['y', 'yes', '']:
-            threaded_share_like_process(account_info, num_shares, share_delay_range, like_delay_range)
+            threaded_share_like_process(account_info, num_shares, share_delay_range, like_delay_range, use_original_only)
         
     elif choice == "2":
         # New cycle-based automation configuration
@@ -1079,6 +1047,20 @@ def main():
         print(f"{colored_text('💡 Infinite cycles: Share → Like → Complete → Repeat (Ctrl+C to stop)', Colors.CYAN)}")
         
         try:
+            # Ask about original cast text option
+            while True:
+                original_choice = input(f"{colored_text('📝 Use ORIGINAL cast text only? (y/n): ', Colors.CYAN)}").strip().lower()
+                if original_choice in ['y', 'yes']:
+                    use_original_only = True
+                    print(f"{colored_text('✅ Will use ORIGINAL cast text only', Colors.GREEN)}")
+                    break
+                elif original_choice in ['n', 'no']:
+                    use_original_only = False
+                    print(f"{colored_text('✅ Will use VARIED cast texts', Colors.GREEN)}")
+                    break
+                else:
+                    print(f"{colored_text('❌ Please enter y or n', Colors.RED)}")
+            
             num_shares = int(input(f"{colored_text('📝 Shares per account per cycle: ', Colors.CYAN)}") or "3")
             num_shares = max(1, num_shares)
             
@@ -1095,6 +1077,7 @@ def main():
             
         except ValueError:
             print(f"{colored_text('⚠️  Invalid input, using defaults', Colors.YELLOW)}")
+            use_original_only = False
             num_shares = 3
             share_delay_range = (10, 30)
             like_delay_range = (2, 5)
@@ -1102,6 +1085,7 @@ def main():
         
         print(f"\n{colored_text('✅ INFINITE CYCLE AUTOMATION SUMMARY', Colors.GREEN)}")
         print(f"  📝 Shares per cycle: {num_shares} per account")
+        print(f"  📝 Original text only: {'Yes' if use_original_only else 'No'}")
         print(f"  ⏳ Share delay: {share_delay_range[0]}-{share_delay_range[1]}s")
         print(f"  👍 Like delay: {like_delay_range[0]}-{like_delay_range[1]}s")
         print(f"  � Cycles: INFINITE (until Ctrl+C)")
@@ -1111,7 +1095,7 @@ def main():
         
         confirm = input(f"\n{colored_text('Start infinite cycle automation? (y/n): ', Colors.BOLD + Colors.YELLOW)}").strip().lower()
         if confirm in ['y', 'yes', '']:
-            cycle_based_share_like_automation(account_info, num_shares, share_delay_range, like_delay_range, 999, cycle_delay)  # cycles=999 as placeholder, will be infinite
+            cycle_based_share_like_automation(account_info, num_shares, share_delay_range, like_delay_range, 999, cycle_delay, use_original_only)  # cycles=999 as placeholder, will be infinite
         
     elif choice == "3":
         # Check fuel status

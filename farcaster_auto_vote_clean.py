@@ -35,6 +35,7 @@ from urllib.parse import unquote, quote
 global_team_preference = "auto"
 global_fuel_strategy = "max"
 global_min_fuel_threshold = 1
+global_auto_claim_fuel = True  # New: Auto claim fuel configuration
 
 # Color codes for terminal styling
 class Colors:
@@ -249,12 +250,13 @@ def wait_for_next_match(bot_instance, max_wait_minutes=30):
     return False, None
 
 class FarcasterAutoVote:
-    def __init__(self, authorization_token, fuel_amount=1, max_fuel=10, team_preference=None, lazy_init=False):
+    def __init__(self, authorization_token, fuel_amount=1, max_fuel=999, team_preference=None, lazy_init=False):
         self.authorization_token = authorization_token
         self.fuel_amount = fuel_amount
         self.max_fuel = max_fuel
         self.team_preference = team_preference
         self.user_id = None
+        self.fuel_strategy = None  # Track fuel strategy separately
         
         # Initialize anti-detection session
         if ANTI_DETECTION_AVAILABLE:
@@ -355,12 +357,16 @@ class FarcasterAutoVote:
                 if fid:
                     print(f"✅ Auto-detected FID: {fid} (@{username})")
                     
-                    # Auto register to Wreck League frame after FID detection
-                    print(f"{colored_text('🔄 Auto-registering to Wreck League frame...', Colors.CYAN)}")
-                    if self.register_user_to_frame():
-                        print(f"{colored_text('✅ Successfully registered to frame!', Colors.GREEN)}")
+                    # Check if user is already registered before attempting registration
+                    if self.is_user_registered(fid):
+                        print(f"{colored_text('✅ User is already registered to Wreck League, skipping registration', Colors.GREEN)}")
                     else:
-                        print(f"{colored_text('⚠️ Registration may have failed, but continuing...', Colors.YELLOW)}")
+                        # Auto register to Wreck League frame only if not registered
+                        print(f"{colored_text('🔄 Auto-registering to Wreck League frame...', Colors.CYAN)}")
+                        if self.register_user_to_frame():
+                            print(f"{colored_text('✅ Successfully registered to frame!', Colors.GREEN)}")
+                        else:
+                            print(f"{colored_text('⚠️ Registration may have failed, but continuing...', Colors.YELLOW)}")
                     
                     return fid
                 else:
@@ -377,6 +383,40 @@ class FarcasterAutoVote:
     def _generate_uuid(self):
         """Generate UUID untuk keperluan API"""
         return str(uuid.uuid4())
+
+    def is_user_registered(self, fid):
+        """Check if user is already registered to Wreck League"""
+        try:
+            # Check user registration status using user data endpoint
+            url = f"https://versus-prod-api.wreckleague.xyz/v1/user/data?fId={fid}"
+            headers = {
+                "accept": "*/*",
+                "accept-language": "en-US,en;q=0.9",
+                "authorization": f"Bearer {self.authorization_token}",
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+            
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                # User is registered if we get valid data
+                data = response.json()
+                if isinstance(data, dict) and 'data' in data:
+                    print(f"{colored_text(f'✅ User FID {fid} is already registered to Wreck League', Colors.GREEN)}")
+                    return True
+            elif response.status_code == 404:
+                # User not found = not registered
+                print(f"{colored_text(f'ℹ️ User FID {fid} is not registered yet', Colors.YELLOW)}")
+                return False
+            else:
+                print(f"{colored_text(f'⚠️ Could not verify registration status (HTTP {response.status_code})', Colors.YELLOW)}")
+                return False
+                
+        except Exception as e:
+            print(f"{colored_text(f'⚠️ Error checking registration status: {e}', Colors.YELLOW)}")
+            return False
+        
+        return False
 
     def register_user_to_frame(self):
         """Register user ke Wreck League frame jika belum terdaftar"""
@@ -478,26 +518,28 @@ class FarcasterAutoVote:
             return True
 
     def get_user_fuel_info(self, fid=None, skip_claim=False):
-        """Get accurate fuel info with comprehensive debugging"""
+        """
+        Get accurate fuel info with comprehensive debugging
+        
+        Args:
+            fid: Optional FID, will use self.user_id if not provided
+            skip_claim: Set to True to skip automatic fuel claiming (default: False for auto-claim)
+        """
         try:
             fid = fid or self.ensure_initialized()
+            
+            # Check global auto claim configuration
+            if not global_auto_claim_fuel:
+                skip_claim = True  # Force skip if globally disabled
+            
             print(f"{colored_text(f'🔍 Checking fuel for FID: {fid}', Colors.CYAN)}")
             
-            # Only claim fuel if not skipped (untuk avoid multiple claims per cycle)
-            if not skip_claim:
-                try:
-                    print(f"{colored_text('🎁 Checking for claimable fuel rewards...', Colors.CYAN)}")
-                    claim_success = self.claim_fuel_reward()
-                    if claim_success:
-                        time.sleep(2)  # Wait for balance to update
-                        print(f"{colored_text('✅ Fuel claimed, refreshing data...', Colors.GREEN)}")
-                    else:
-                        print(f"{colored_text('ℹ️ No fuel claimed, continuing with current balance...', Colors.YELLOW)}")
-                    time.sleep(1)
-                except Exception as e:
-                    print(f"{colored_text(f'⚠️ Reward check failed: {e}', Colors.YELLOW)}")
+            if skip_claim:
+                if global_auto_claim_fuel:
+                    print(f"{colored_text('⏩ Skipping auto-fuel claim (will be done after voting delay)', Colors.CYAN)}")
+                # If global auto claim is disabled, don't show any claim-related messages
             else:
-                print(f"{colored_text('⏩ Skipping fuel claim check (already done this cycle)', Colors.CYAN)}")
+                print(f"{colored_text('🎁 Auto-claim enabled in fuel check', Colors.CYAN)}")
             
             url = f"https://versus-prod-api.wreckleague.xyz/v1/user/data?fId={fid}"
             headers = {
@@ -510,12 +552,20 @@ class FarcasterAutoVote:
             response = requests.get(url, headers=headers, timeout=10)
             
             if response.status_code == 404:
-                print(f"{colored_text('❌ User not found, attempting registration...', Colors.RED)}")
-                if self.register_user_to_frame():
-                    time.sleep(3)
-                    response = requests.get(url, headers=headers, timeout=10)
+                print(f"{colored_text('❌ User not found, checking registration status...', Colors.RED)}")
+                # Check if user is registered before attempting registration
+                if not self.is_user_registered(fid):
+                    print(f"{colored_text('🔄 User not registered, attempting registration...', Colors.CYAN)}")
+                    if self.register_user_to_frame():
+                        time.sleep(3)
+                        response = requests.get(url, headers=headers, timeout=10)
+                    else:
+                        return 0
                 else:
-                    return 0
+                    # User is registered but API returned 404, retry the request
+                    print(f"{colored_text('🔄 User is registered, retrying fuel check...', Colors.CYAN)}")
+                    time.sleep(2)
+                    response = requests.get(url, headers=headers, timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
@@ -524,62 +574,72 @@ class FarcasterAutoVote:
                 user_data = data.get('data', {}) if isinstance(data, dict) else {}
                 can_claim = user_data.get('canClaimFuel', False)
                 
-                # Additional backup check menggunakan endpoint reward langsung
-                try:
-                    reward_headers = {
-                        'accept': '*/*',
-                        'accept-language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
-                        'sec-ch-ua': '"Not-A.Brand";v="99", "Chromium";v="124"',
-                        'sec-ch-ua-mobile': '?0',
-                        'sec-ch-ua-platform': '"Linux"',
-                        'sec-fetch-dest': 'empty',
-                        'sec-fetch-mode': 'cors',
-                        'sec-fetch-site': 'same-site'
-                    }
-                    reward_url = f"https://versus-prod-api.wreckleague.xyz/v1/user/fuelReward?fId={fid}"
-                    reward_response = requests.get(reward_url, headers=reward_headers, timeout=5)
-                    
-                    if reward_response.status_code == 200:
-                        reward_data = reward_response.json()
+                # Only check and display claim fuel info if auto claim is enabled globally
+                if global_auto_claim_fuel:
+                    # Additional backup check menggunakan endpoint reward langsung
+                    try:
+                        reward_headers = {
+                            'accept': '*/*',
+                            'accept-language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+                            'sec-ch-ua': '"Not-A.Brand";v="99", "Chromium";v="124"',
+                            'sec-ch-ua-mobile': '?0',
+                            'sec-ch-ua-platform': '"Linux"',
+                            'sec-fetch-dest': 'empty',
+                            'sec-fetch-mode': 'cors',
+                            'sec-fetch-site': 'same-site'
+                        }
+                        reward_url = f"https://versus-prod-api.wreckleague.xyz/v1/user/fuelReward?fId={fid}"
+                        reward_response = requests.get(reward_url, headers=reward_headers, timeout=5)
                         
-                        # Check for any claimable fuel indications
-                        if isinstance(reward_data, dict):
-                            if 'data' in reward_data and reward_data['data']:
-                                reward_obj = reward_data['data']
-                                if isinstance(reward_obj, dict):
-                                    claimable = reward_obj.get('claimableFuel', 0)
-                                    if claimable > 0:
-                                        print(f"{colored_text(f'🎁 BACKUP CHECK: Found {claimable} claimable fuel!', Colors.GREEN)}")
-                                        can_claim = True
+                        if reward_response.status_code == 200:
+                            reward_data = reward_response.json()
                             
-                            # Check untuk fuelsToCllaim di root level
-                            if 'fuelsToCllaim' in reward_data:
-                                claimable = reward_data.get('fuelsToCllaim', 0)
-                                if claimable > 0:
-                                    print(f"{colored_text(f'🎁 BACKUP CHECK: Found {claimable} fuelsToCllaim!', Colors.GREEN)}")
-                                    can_claim = True
-                                    
-                            # Check untuk fuelsData structure
-                            if 'fuelsData' in reward_data:
-                                fuels_data = reward_data['fuelsData']
-                                if isinstance(fuels_data, dict) and 'fuelsToCllaim' in fuels_data:
-                                    claimable = fuels_data.get('fuelsToCllaim', 0)
+                            # Check for any claimable fuel indications
+                            if isinstance(reward_data, dict):
+                                if 'data' in reward_data and reward_data['data']:
+                                    reward_obj = reward_data['data']
+                                    if isinstance(reward_obj, dict):
+                                        claimable = reward_obj.get('claimableFuel', 0)
+                                        if claimable > 0:
+                                            print(f"{colored_text(f'🎁 BACKUP CHECK: Found {claimable} claimable fuel!', Colors.GREEN)}")
+                                            can_claim = True
+                                
+                                # Check untuk fuelsToCllaim di root level
+                                if 'fuelsToCllaim' in reward_data:
+                                    claimable = reward_data.get('fuelsToCllaim', 0)
                                     if claimable > 0:
-                                        print(f"{colored_text(f'🎁 BACKUP CHECK: Found {claimable} fuels in fuelsData!', Colors.GREEN)}")
+                                        print(f"{colored_text(f'🎁 BACKUP CHECK: Found {claimable} fuelsToCllaim!', Colors.GREEN)}")
                                         can_claim = True
-                except Exception as reward_e:
-                    print(f"{colored_text(f'⚠️ Backup reward check failed: {reward_e}', Colors.YELLOW)}")
-                
-                if can_claim:
-                    print(f"{colored_text('🎁 Can claim fuel: YES - Auto claiming...', Colors.GREEN)}")
-                    if self.claim_fuel_reward():
-                        time.sleep(2)
-                        response = requests.get(url, headers=headers, timeout=10)
-                        if response.status_code == 200:
-                            data = response.json()
-                            print(f"{colored_text('✅ Data refreshed after fuel claim', Colors.GREEN)}")
-                else:
-                    print(f"{colored_text('🎁 Can claim fuel: NO', Colors.YELLOW)}")
+                                        
+                                # Check untuk fuelsData structure
+                                if 'fuelsData' in reward_data:
+                                    fuels_data = reward_data['fuelsData']
+                                    if isinstance(fuels_data, dict) and 'fuelsToCllaim' in fuels_data:
+                                        claimable = fuels_data.get('fuelsToCllaim', 0)
+                                        if claimable > 0:
+                                            print(f"{colored_text(f'🎁 BACKUP CHECK: Found {claimable} fuels in fuelsData!', Colors.GREEN)}")
+                                            can_claim = True
+                    except Exception as reward_e:
+                        print(f"{colored_text(f'⚠️ Backup reward check failed: {reward_e}', Colors.YELLOW)}")
+                    
+                    if can_claim:
+                        if skip_claim:
+                            print(f"{colored_text('🎁 Can claim fuel: YES (will claim after voting delay)', Colors.GREEN)}")
+                        else:
+                            print(f"{colored_text('🎁 Can claim fuel: YES (auto-claiming enabled)', Colors.GREEN)}")
+                            # Proceed to auto-claim if not skipping
+                            try:
+                                claim_success = self.claim_fuel_reward()
+                                if claim_success:
+                                    print(f"{colored_text('✅ AUTO-CLAIM: Fuel rewards claimed successfully!', Colors.GREEN)}")
+                                    time.sleep(2)  # Wait for balance to update
+                                else:
+                                    print(f"{colored_text('ℹ️ AUTO-CLAIM: No fuel rewards available', Colors.YELLOW)}")
+                            except Exception as claim_e:
+                                print(f"{colored_text(f'⚠️ AUTO-CLAIM: Failed to claim fuel: {claim_e}', Colors.YELLOW)}")
+                    else:
+                        print(f"{colored_text('🎁 Can claim fuel: NO', Colors.YELLOW)}")
+                # If auto claim is disabled globally, skip all claim-related checks and messages
                 
                 # Enhanced fuel path detection with better error handling
                 fuel_paths = [
@@ -629,6 +689,12 @@ class FarcasterAutoVote:
     def claim_fuel_reward(self):
         """Claim fuel reward if available"""
         try:
+            # Ensure FID is initialized before making claim request
+            fid = self.ensure_initialized()
+            if not fid:
+                print(f"{colored_text('❌ Cannot claim fuel: FID not initialized', Colors.RED)}")
+                return False
+            
             print(f"{colored_text('🎁 Checking for claimable fuel rewards...', Colors.YELLOW)}")
             
             # Headers yang sama persis dengan browser request dari enpointclaim.txt
@@ -645,7 +711,7 @@ class FarcasterAutoVote:
             }
             
             # Step 1: Check for available rewards first (GET request)
-            check_url = f"https://versus-prod-api.wreckleague.xyz/v1/user/fuelReward?fId={self.user_id}"
+            check_url = f"https://versus-prod-api.wreckleague.xyz/v1/user/fuelReward?fId={fid}"
             
             check_response = requests.get(check_url, headers=headers, timeout=10)
             
@@ -716,7 +782,7 @@ class FarcasterAutoVote:
                     claim_headers = headers.copy()
                     claim_headers['content-type'] = 'application/json'
                     
-                    claim_payload = {"fId": self.user_id}
+                    claim_payload = {"fId": fid}
                     
                     claim_response = requests.post(
                         "https://versus-prod-api.wreckleague.xyz/v1/user/fuelReward", 
@@ -919,35 +985,23 @@ class FarcasterAutoVote:
         
         # Jika ada preferensi tim
         if self.team_preference:
-            # Coba identifikasi tim berdasarkan posisi atau data
+            # SIMPLE TEAM LOGIC: Red = index 0, Blue = index 1 (NO kiri/kanan)
             for i, mech in enumerate(mech_details):
-                team_indicator = ""
+                selected = False
                 
-                # MAPPING YANG BENAR:
-                # Index 0 = Tim PERTAMA (biasanya Blue/Kiri)
-                # Index 1 = Tim KEDUA (biasanya Red/Kanan)
-                if i == 0:
-                    team_indicator = "blue"   # Index 0 = Blue Team (Kiri)
-                elif i == 1:
-                    team_indicator = "red"    # Index 1 = Red Team (Kanan)
+                # FIXED MAPPING sesuai permintaan user:
+                if self.team_preference == 'red' and i == 0:
+                    print(f"✅ RED TEAM SELECTED!")
+                    print(f"🔴 Selected: Mech {mech['mechId']} (RED Team - Index 0)")
+                    print(f"🏆 Win Probability: {mech.get('winningProbability', 0)}%")
+                    selected = True
+                elif self.team_preference == 'blue' and i == 1:
+                    print(f"✅ BLUE TEAM SELECTED!")
+                    print(f"🔵 Selected: Mech {mech['mechId']} (BLUE Team - Index 1)")
+                    print(f"🏆 Win Probability: {mech.get('winningProbability', 0)}%")
+                    selected = True
                 
-                # Cek berdasarkan field mechType jika ada
-                if 'mechType' in mech:
-                    if mech['mechType'] in ['left', 'kiri']:
-                        team_indicator = "blue"   # Left/Kiri = Blue Team
-                    elif mech['mechType'] in ['right', 'kanan']:
-                        team_indicator = "red"    # Right/Kanan = Red Team
-                
-                # Match dengan preferensi user - PERBAIKAN MAPPING
-                user_wants_blue = self.team_preference in ['blue', 'biru', 'left', 'kiri', '1', 'first']
-                user_wants_red = self.team_preference in ['red', 'merah', 'right', 'kanan', '2', 'second']
-                
-                if (user_wants_blue and team_indicator == "blue") or (user_wants_red and team_indicator == "red"):
-                    print(f"✅ TEAM PREFERENCE MATCHED!")
-                    print(f"🎯 User wants: {self.team_preference.upper()}")
-                    print(f"🎯 Selected: Mech {mech['mechId']} ({team_indicator.upper()} Team)")
-                    print(f"   📍 Position: Index {i} ({'Left' if i == 0 else 'Right'})")
-                    print(f"   🏆 Win Probability: {mech.get('winningProbability', 0)}%")
+                if selected:
                     return mech
         
         # Jika tidak ada preferensi atau tidak ditemukan, pilih yang terbaik
@@ -967,9 +1021,9 @@ class FarcasterAutoVote:
         try:
             fid = fid or self.user_id
             
-            # Auto check dan claim fuel sebelum voting
+            # Check fuel status before voting (skip auto-claim since it's done at cycle start)
             print(f"\n{colored_text('⛽ Checking fuel status before voting...', Colors.YELLOW)}")
-            current_fuel = self.get_user_fuel_info()
+            current_fuel = self.get_user_fuel_info(skip_claim=True)
             print(f"{colored_text(f'💰 Available fuel: {current_fuel}', Colors.GREEN)}")
             
             # Auto-detect latest match ID jika tidak disediakan
@@ -1017,9 +1071,9 @@ class FarcasterAutoVote:
                     if len(mech_details) >= 2:
                         mech_index = next((i for i, m in enumerate(mech_details) if m['mechId'] == mech_id), -1)
                         if mech_index == 0:
-                            team_info = " (� Tim Biru/Kiri)"   # Index 0 = Biru = Kiri
+                            team_info = " (🔴 Red Team)"       # Index 0 = Red Team
                         elif mech_index == 1:
-                            team_info = " (� Tim Merah/Kanan)" # Index 1 = Merah = Kanan
+                            team_info = " (🔵 Blue Team)"      # Index 1 = Blue Team
                     
                     print(f"🎯 Selected mech {mech_id}{team_info}")
                     
@@ -1055,15 +1109,25 @@ class FarcasterAutoVote:
             
             # Tentukan jumlah fuel berdasarkan setting
             if not fuel_points:
-                if self.fuel_amount:
-                    # Cek apakah fuel amount tidak melebihi max fuel dan available fuel
-                    max_usable = min(self.fuel_amount, self.max_fuel, current_fuel)
-                    fuel_points = max_usable
-                else:
+                # Check fuel strategy first, then fall back to self.fuel_amount logic
+                if hasattr(self, 'fuel_strategy') and self.fuel_strategy == "max":
                     # Max strategy - gunakan semua fuel yang tersedia
                     fuel_points = min(current_fuel, self.max_fuel)
+                    print(f"🎯 Fuel strategy: Max Available (using strategy attribute)")
+                elif hasattr(self, 'fuel_strategy') and self.fuel_strategy in ["conservative", "custom"]:
+                    # Conservative/Custom strategy - gunakan fuel_amount yang sudah dihitung
+                    fuel_points = min(self.fuel_amount, self.max_fuel, current_fuel) if self.fuel_amount else 1
+                    print(f"🎯 Fuel strategy: {self.fuel_strategy.title()} (using strategy attribute)")
+                elif self.fuel_amount:
+                    # Legacy logic: Cek apakah fuel amount tidak melebihi max fuel dan available fuel
+                    max_usable = min(self.fuel_amount, self.max_fuel, current_fuel)
+                    fuel_points = max_usable
+                    print(f"🎯 Fuel strategy: Custom/Conservative (legacy logic)")
+                else:
+                    # Default: Max strategy - gunakan semua fuel yang tersedia
+                    fuel_points = min(current_fuel, self.max_fuel)
+                    print(f"🎯 Fuel strategy: Max Available (default)")
                 
-                print(f"🎯 Fuel strategy: {'Custom/Conservative' if self.fuel_amount else 'Max Available'}")
                 print(f"💰 Current fuel: {current_fuel}, Max fuel: {self.max_fuel}")
                 print(f"⛽ Will use: {fuel_points} fuel points")
             
@@ -1143,13 +1207,8 @@ class FarcasterAutoVote:
             # Initialize vote counter
             self.votes_submitted = 0
             
-            # Step 1: Check and claim fuel rewards before voting
-            print(f"\n{colored_text('🎁 Checking for fuel rewards...', Colors.CYAN)}")
-            try:
-                self.claim_fuel_reward()
-                time.sleep(1)  # Brief delay after claiming
-            except Exception as e:
-                print(f"{colored_text(f'⚠️ Fuel claim check failed, continuing: {e}', Colors.YELLOW)}")
+            # Step 1: Skip fuel claim before voting (will do after delay)
+            print(f"\n{colored_text('ℹ️ Fuel will be claimed after voting delay...', Colors.CYAN)}")
             
             # Get match details
             match_details = self.get_match_details()
@@ -1213,7 +1272,7 @@ def process_single_account_vote(account_info, team_preference, fuel_strategy, cu
         
         # Initialize bot instance
         fuel_amount = custom_fuel if fuel_strategy == "custom" else None
-        bot = FarcasterAutoVote(token, fuel_amount, 10, team_preference)
+        bot = FarcasterAutoVote(token, fuel_amount, 999, team_preference)
         
         # Run voting process
         success = bot.run_auto_vote()
@@ -1276,7 +1335,8 @@ def run_account_continuous_thread(account_info, thread_id, delay_config=None, te
         
         # Create bot dengan fuel_amount = None untuk max strategy (akan detect real-time)
         # Use lazy_init=False to ensure FID detection works properly
-        bot = FarcasterAutoVote(token, None, 10, bot_team_pref, lazy_init=False)
+        bot = FarcasterAutoVote(token, None, 999, bot_team_pref, lazy_init=False)
+        bot.fuel_strategy = fuel_strategy  # Set strategy attribute
         
         print(f"🎯 [Thread-{thread_id+1}] Fuel strategy: {fuel_strategy}")
         print(f"⛽ [Thread-{thread_id+1}] Min fuel threshold: {min_fuel_threshold}")
@@ -1318,8 +1378,13 @@ def run_account_continuous_thread(account_info, thread_id, delay_config=None, te
                         time.sleep(300)  # Wait 5 minutes and check again
                         continue
                 
-                # Update bot dengan fuel amount yang benar untuk cycle ini
-                bot.fuel_amount = vote_fuel_amount
+                # Update bot dengan fuel amount untuk conservative/custom strategies only
+                # For max strategy, keep fuel_amount as None so logic in submit_prediction works correctly
+                if fuel_strategy in ["conservative", "custom"]:
+                    bot.fuel_amount = vote_fuel_amount
+                else:
+                    # Keep fuel_amount as None for max strategy
+                    bot.fuel_amount = None
                 
                 print(f"\n{colored_text('╔' + '═' * 68 + '╗', Colors.MAGENTA)}")
                 # Use bot.user_id instead of account['fid'] for accurate display
@@ -1328,6 +1393,20 @@ def run_account_continuous_thread(account_info, thread_id, delay_config=None, te
                 print(f"{colored_text('║', Colors.MAGENTA)} {colored_text(thread_text, Colors.BOLD + Colors.WHITE):>60} {colored_text('║', Colors.MAGENTA)}")
                 print(f"{colored_text('╚' + '═' * 68 + '╝', Colors.MAGENTA)}")
                 
+                # Step 1: AUTO-CLAIM FUEL AT START OF EACH CYCLE (only if enabled)
+                if global_auto_claim_fuel:
+                    print(f"{colored_text(f'🎁 [Account-{account['index']}] CYCLE START AUTO-CLAIM CHECK', Colors.GREEN)}")
+                    try:
+                        claim_success = bot.claim_fuel_reward()
+                        if claim_success:
+                            print(f"{colored_text(f'✅ [Account-{account['index']}] Fuel rewards claimed at cycle start!', Colors.GREEN)}")
+                            time.sleep(2)  # Wait for balance to update
+                        else:
+                            print(f"{colored_text(f'ℹ️ [Account-{account['index']}] No fuel rewards available to claim', Colors.YELLOW)}")
+                    except Exception as e:
+                        print(f"{colored_text(f'⚠️ [Account-{account['index']}] Auto fuel claim failed: {e}', Colors.YELLOW)}")
+                
+                # Step 2: Check current fuel status (after potential claim)
                 current_fuel = bot.get_user_fuel_info()
                 print(f"{colored_text(f'⛽ [Account-{account['index']}] Current fuel: {current_fuel}', Colors.GREEN)}")
                 
@@ -1443,6 +1522,19 @@ def run_account_continuous_thread(account_info, thread_id, delay_config=None, te
                             
                             print(f"\n{colored_text(f'✅ [Account-{account['index']}] Voting window ended! Searching for next match...', Colors.BLUE)}")
                             
+                            # CLAIM FUEL SETELAH VOTING DELAY SELESAI (SEKALI PER CYCLE) - only if enabled
+                            if global_auto_claim_fuel:
+                                print(f"\n{colored_text(f'🎁 [Account-{account['index']}] POST-VOTING FUEL CLAIM', Colors.GREEN)}")
+                                try:
+                                    claim_success = bot.claim_fuel_reward()
+                                    if claim_success:
+                                        print(f"{colored_text(f'✅ [Account-{account['index']}] Fuel rewards claimed!', Colors.GREEN)}")
+                                        time.sleep(2)  # Wait for balance to update
+                                    else:
+                                        print(f"{colored_text(f'ℹ️ [Account-{account['index']}] No fuel rewards available', Colors.YELLOW)}")
+                                except Exception as e:
+                                    print(f"{colored_text(f'⚠️ [Account-{account['index']}] Fuel claim failed: {e}', Colors.YELLOW)}")
+                            
                             # Wait for next match dengan proper detection
                             print(f"{colored_text(f'🔍 [Account-{account['index']}] Intelligent next match detection...', Colors.CYAN)}")
                             found_new_match, new_match_data = wait_for_next_match(bot, max_wait_minutes=30)
@@ -1463,6 +1555,18 @@ def run_account_continuous_thread(account_info, thread_id, delay_config=None, te
                         
                 elif status == 'closed':
                     print(f"{colored_text(f'⌛ [Account-{account['index']}] Voting window has closed, searching for next match...', Colors.BLUE)}")
+                    
+                    # CLAIM FUEL SETELAH VOTING CLOSED (SEKALI PER CYCLE)
+                    print(f"\n{colored_text(f'🎁 [Account-{account['index']}] POST-VOTING FUEL CLAIM', Colors.GREEN)}")
+                    try:
+                        claim_success = bot.claim_fuel_reward()
+                        if claim_success:
+                            print(f"{colored_text(f'✅ [Account-{account['index']}] Fuel rewards claimed!', Colors.GREEN)}")
+                            time.sleep(2)  # Wait for balance to update
+                        else:
+                            print(f"{colored_text(f'ℹ️ [Account-{account['index']}] No fuel rewards available', Colors.YELLOW)}")
+                    except Exception as e:
+                        print(f"{colored_text(f'⚠️ [Account-{account['index']}] Fuel claim failed: {e}', Colors.YELLOW)}")
                     
                     # Wait for next match dengan intelligent detection
                     print(f"{colored_text(f'🔍 [Account-{account['index']}] Intelligent next match detection...', Colors.CYAN)}")
@@ -1664,7 +1768,7 @@ def threaded_multi_account_vote(account_info_list, use_threading=False, delay_co
                     try:
                         first_successful_token = next(acc['token'] for acc in account_info_list 
                                                     if any(r['account_index'] == acc['index'] and r['success'] for r in all_results))
-                        temp_bot = FarcasterAutoVote(first_successful_token, 1, 10, None)
+                        temp_bot = FarcasterAutoVote(first_successful_token, 1, 999, None)
                         match_details = temp_bot.get_match_details()
                         
                         if match_details and 'data' in match_details and match_details['data']['matchData']:
@@ -1782,7 +1886,7 @@ def continuous_multi_account_vote(account_info, delay_config=None, team_preferen
                 break
             
             # Setup bot dari account pertama untuk get timing info
-            temp_bot = FarcasterAutoVote(active_accounts[0]['token'], 1, 10, None)
+            temp_bot = FarcasterAutoVote(active_accounts[0]['token'], 1, 999, None)
             
             # Get current match timing
             match_details = temp_bot.get_match_details()
@@ -1877,7 +1981,7 @@ def continuous_multi_account_vote(account_info, delay_config=None, team_preferen
                 
                 try:
                     # Initialize if needed dan get fuel
-                    temp_bot = FarcasterAutoVote(acc['token'], 1, 10, None, lazy_init=True)
+                    temp_bot = FarcasterAutoVote(acc['token'], 1, 999, None, lazy_init=True)
                     if not acc['fid']:  # Update FID if not set
                         acc['fid'] = temp_bot.ensure_initialized()
                         acc_fid = acc['fid']
@@ -1933,13 +2037,14 @@ def continuous_multi_account_vote(account_info, delay_config=None, team_preferen
                     if fuel_strategy == "conservative":
                         fuel_to_use = min_fuel_threshold
                     elif fuel_strategy == "max":
-                        fuel_to_use = current_fuel
+                        fuel_to_use = None  # Use None for max strategy to trigger max fuel logic
                     elif fuel_strategy == "custom":
                         fuel_to_use = min(min_fuel_threshold, current_fuel)
                     else:
-                        fuel_to_use = current_fuel  # Default to max
+                        fuel_to_use = None  # Default to max
                     
-                    print(f"{colored_text(f'🎯 Using {fuel_to_use} fuel for this vote (strategy: {fuel_strategy})', Colors.YELLOW)}")
+                    fuel_display = "Max Available" if fuel_to_use is None else str(fuel_to_use)
+                    print(f"{colored_text(f'🎯 Using {fuel_display} fuel for this vote (strategy: {fuel_strategy})', Colors.YELLOW)}")
                     
                     # TAMBAHAN: Random delay sebelum vote (hanya jika ada delay)
                     delay_time = account_delays[acc_index]
@@ -1960,7 +2065,7 @@ def continuous_multi_account_vote(account_info, delay_config=None, team_preferen
                     
                     # Attempt vote with global team preference
                     bot_team_pref = None if team_preference == "auto" else team_preference
-                    bot = FarcasterAutoVote(acc['token'], fuel_to_use, current_fuel, bot_team_pref)
+                    bot = FarcasterAutoVote(acc['token'], fuel_to_use, max(current_fuel, 999), bot_team_pref)
                     success = bot.run_auto_vote()
                     
                     if success:
@@ -2010,12 +2115,39 @@ def continuous_multi_account_vote(account_info, delay_config=None, team_preferen
                     
                     print(f"\n🔄 Voting window ended, checking for next match...")
                     
+                    # CLAIM FUEL SETELAH VOTING DELAY SELESAI (SEKALI SAJA)
+                    print(f"\n{colored_text('🎁 POST-VOTING FUEL CLAIM', Colors.BOLD + Colors.GREEN)}")
+                    print(f"{colored_text('⚡ Claiming fuel rewards after voting delay completed...', Colors.GREEN)}")
+                    
+                    try:
+                        # Use first successful account token to claim fuel for all accounts
+                        first_successful_token = None
+                        for acc in active_accounts:
+                            if acc.get('fuel', 0) > 0:  # Find any account with fuel
+                                first_successful_token = acc['token']
+                                break
+                        
+                        if first_successful_token:
+                            temp_bot = FarcasterAutoVote(first_successful_token, 1, 999, None)
+                            claim_success = temp_bot.claim_fuel_reward()
+                            if claim_success:
+                                print(f"{colored_text('✅ Fuel rewards claimed successfully!', Colors.GREEN)}")
+                                time.sleep(3)  # Wait for balance to update
+                            else:
+                                print(f"{colored_text('ℹ️ No fuel rewards available to claim', Colors.YELLOW)}")
+                        else:
+                            print(f"{colored_text('⚠️ No valid account found for fuel claiming', Colors.YELLOW)}")
+                    except Exception as e:
+                        print(f"{colored_text(f'⚠️ Post-voting fuel claim failed: {e}', Colors.YELLOW)}")
+                    
+                    print(f"{colored_text('─' * 50, Colors.GREEN)}")
+                    
                 # Wait for next match dengan deteksi timing yang akurat
                 print(f"\n{colored_text('🔍 NEXT MATCH DETECTION', Colors.BOLD + Colors.BLUE)}")
                 print(f"{colored_text('⚡ Starting intelligent match detection...', Colors.CYAN)}")
                 
                 # Setup bot untuk deteksi match berikutnya
-                temp_bot = FarcasterAutoVote(active_accounts[0]['token'], 1, 10, None)
+                temp_bot = FarcasterAutoVote(active_accounts[0]['token'], 1, 999, None)
                 
                 # Wait dan deteksi match berikutnya
                 found_new_match, new_match_data = wait_for_next_match(temp_bot, max_wait_minutes=30)
@@ -2181,9 +2313,9 @@ def main():
             print(f"{colored_text(f'🔄 Account {i}/{len(account_info)}...', Colors.CYAN)}", end=' ')
             try:
                 # Create bot with lazy init and check fuel
-                temp_bot = FarcasterAutoVote(acc['token'], 1, 10, None, lazy_init=True)
+                temp_bot = FarcasterAutoVote(acc['token'], 1, 999, None, lazy_init=True)
                 fid = temp_bot.ensure_initialized()
-                fuel = temp_bot.get_user_fuel_info()
+                fuel = temp_bot.get_user_fuel_info()  # Keep auto-claim enabled for check fuel menu
                 
                 # Update account info
                 acc['fid'] = fid
@@ -2316,6 +2448,31 @@ def main():
         global_fuel_strategy = "max"
         global_min_fuel_threshold = 1
         print(f"{colored_text('✅ Fuel strategy set to: Max Available (min fuel: 1)', Colors.GREEN)}")
+    
+    # AUTO CLAIM FUEL CONFIGURATION
+    print(f"\n{colored_text('─' * 50, Colors.MAGENTA)}")
+    print(f"{colored_text('🎁 AUTO CLAIM FUEL', Colors.BOLD + Colors.MAGENTA)}")
+    print(f"{colored_text('─' * 50, Colors.MAGENTA)}")
+    
+    auto_claim_menu_lines = [
+        "╭─────────────────────────────────────────────────────────╮",
+        "│  y. ✅ Enable Auto Claim Fuel (Recommended)           │",
+        "│  n. ❌ Disable Auto Claim Fuel (Silent mode)          │",
+        "╰─────────────────────────────────────────────────────────╯"
+    ]
+    
+    for line in auto_claim_menu_lines:
+        print(colored_text(line, Colors.BLUE))
+    
+    auto_claim_choice = input(f"\n{colored_text('🎁 Enable auto claim fuel? (y/n):', Colors.BOLD + Colors.YELLOW)} ").strip().lower()
+    
+    global global_auto_claim_fuel
+    if auto_claim_choice in ['n', 'no', '0', 'false']:
+        global_auto_claim_fuel = False
+        print(f"{colored_text('✅ Auto claim fuel: DISABLED (all claim messages hidden)', Colors.YELLOW)}")
+    else:
+        global_auto_claim_fuel = True
+        print(f"{colored_text('✅ Auto claim fuel: ENABLED (automatic fuel claiming)', Colors.GREEN)}")
     
     # Ask for threading preference
     print(f"\n{colored_text('─' * 50, Colors.MAGENTA)}")
