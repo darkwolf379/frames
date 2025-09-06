@@ -1,0 +1,37 @@
+# Farcaster Automation Scripts - Requirements
+# Enhanced Anti-Detection System Dependencies
+
+# Core HTTP libraries
+requests>=2.31.0
+urllib3>=2.0.0
+
+# Enhanced Anti-Detection Libraries
+tls-client>=1.0.1
+fake-useragent>=2.0.0
+
+# Threading and concurrency
+# concurrent.futures (built-in Python 3.2+)
+
+# Standard libraries (built-in, listed for reference)
+# json
+# time  
+# random
+# threading
+# uuid
+# os
+# sys
+# signal
+# datetime
+# hashlib
+# base64
+# queue
+# pickle
+# platform
+# typing
+
+# Optional enhanced libraries (recommended)
+aiohttp>=3.8.0  # For async HTTP requests
+httpx>=0.24.0   # Modern HTTP client alternative
+user-agents>=2.2.0  # Additional user agent library
+randomheaders>=1.0.0  # Random header generation
+cloudscraper>=1.2.60  # Cloudflare bypass
