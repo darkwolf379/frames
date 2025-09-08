@@ -29,6 +29,8 @@ except ImportError:
     print("⚠️ TLS-Client not available - install with: pip install tls-client")
 
 try:
+    import warnings
+    warnings.filterwarnings("ignore", message=".*Error occurred during getting browser.*")
     from fake_useragent import UserAgent
     FAKE_UA_AVAILABLE = True
     print("✅ Fake-UserAgent loaded - Dynamic UA enabled")
@@ -107,22 +109,72 @@ class EnhancedBrowserFingerprint:
         'page_load_wait': (1.5, 4.0)
     }
     
-    def __init__(self, account_id: str = None):
+    def __init__(self, account_id: str = None, auth_token: str = None):
         self.account_id = account_id or str(uuid.uuid4())
+        self.auth_token = auth_token
         self.session_dir = "sessions"
+        
+        # Use simple filename since account_id already contains token prefix
         self.session_file = os.path.join(self.session_dir, f"{self.account_id}_fingerprint.pkl")
         
         # Initialize fake user agent if available
         if FAKE_UA_AVAILABLE:
-            self.ua_generator = UserAgent(browsers=['chrome', 'firefox', 'safari', 'edge'])
+            try:
+                import sys
+                import io
+                # Suppress stderr for UserAgent initialization
+                old_stderr = sys.stderr
+                sys.stderr = io.StringIO()
+                self.ua_generator = UserAgent(browsers=['chrome', 'firefox', 'safari', 'edge'], fallback='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36')
+                sys.stderr = old_stderr
+            except Exception as e:
+                if 'old_stderr' in locals():
+                    sys.stderr = old_stderr
+                print(f"⚠️ Warning: UserAgent initialization failed: {e}")
+                self.ua_generator = None
+        else:
+            self.ua_generator = None
         
         self.fingerprint = self._load_or_generate_fingerprint()
+    
+    def _find_matching_fingerprint_file(self) -> Optional[str]:
+        """Find fingerprint file that matches first 10 characters of current token"""
+        if not self.auth_token or len(self.auth_token) < 10:
+            return None
+            
+        os.makedirs(self.session_dir, exist_ok=True)
+        token_prefix = self.auth_token[:10]
+        
+        # Look for existing fingerprint files with same token prefix
+        target_filename = f"{token_prefix}_fingerprint.pkl"
+        target_path = os.path.join(self.session_dir, target_filename)
+        
+        if os.path.exists(target_path):
+            return target_path
+        
+        # Also check old format files for backward compatibility
+        for filename in os.listdir(self.session_dir):
+            if filename.endswith("_fingerprint.pkl") and token_prefix[:5].lower() in filename:
+                return os.path.join(self.session_dir, filename)
+        
+        return None
     
     def _load_or_generate_fingerprint(self) -> Dict:
         """Load existing fingerprint or generate new one"""
         os.makedirs(self.session_dir, exist_ok=True)
         
-        # Try to load existing fingerprint
+        # First try to find matching fingerprint based on token prefix
+        matching_file = self._find_matching_fingerprint_file()
+        if matching_file and os.path.exists(matching_file):
+            try:
+                with open(matching_file, 'rb') as f:
+                    fingerprint = pickle.load(f)
+                    print(f"📁 Loaded matching fingerprint for {self.account_id} (token: {self.auth_token[:10] if self.auth_token else 'none'})")
+                    return fingerprint
+            except Exception as e:
+                print(f"⚠️ Failed to load matching fingerprint: {e}")
+        
+        # Try to load exact fingerprint file
         if os.path.exists(self.session_file):
             try:
                 with open(self.session_file, 'rb') as f:
@@ -153,11 +205,27 @@ class EnhancedBrowserFingerprint:
         random.seed(seed)
         
         # Get user agent
-        if FAKE_UA_AVAILABLE:
+        if FAKE_UA_AVAILABLE and hasattr(self, 'ua_generator') and self.ua_generator:
             try:
+                import sys
+                import io
+                # Suppress stderr for user agent generation
+                old_stderr = sys.stderr
+                sys.stderr = io.StringIO()
                 user_agent = self.ua_generator.chrome
-            except:
-                user_agent = random.choice(self.FALLBACK_USER_AGENTS)
+                sys.stderr = old_stderr
+            except Exception as e:
+                if 'old_stderr' in locals():
+                    sys.stderr = old_stderr
+                try:
+                    old_stderr = sys.stderr
+                    sys.stderr = io.StringIO()
+                    user_agent = self.ua_generator.random
+                    sys.stderr = old_stderr
+                except Exception as e2:
+                    if 'old_stderr' in locals():
+                        sys.stderr = old_stderr
+                    user_agent = random.choice(self.FALLBACK_USER_AGENTS)
         else:
             user_agent = random.choice(self.FALLBACK_USER_AGENTS)
         
@@ -273,10 +341,19 @@ class EnhancedBrowserFingerprint:
     
     def get_fresh_user_agent(self) -> str:
         """Get fresh user agent (updates periodically)"""
-        if FAKE_UA_AVAILABLE:
+        if FAKE_UA_AVAILABLE and hasattr(self, 'ua_generator') and self.ua_generator:
             try:
-                return self.ua_generator.random
-            except:
+                import sys
+                import io
+                # Suppress stderr for user agent generation
+                old_stderr = sys.stderr
+                sys.stderr = io.StringIO()
+                user_agent = self.ua_generator.random
+                sys.stderr = old_stderr
+                return user_agent
+            except Exception as e:
+                if 'old_stderr' in locals():
+                    sys.stderr = old_stderr
                 return self.fingerprint["user_agent"]
         return self.fingerprint["user_agent"]
     
@@ -564,9 +641,12 @@ class ProxyManager:
 class SessionManager:
     """Advanced session persistence and cookie management"""
     
-    def __init__(self, account_id: str):
+    def __init__(self, account_id: str, auth_token: str = None):
         self.account_id = account_id
+        self.auth_token = auth_token
         self.session_dir = "sessions"
+        
+        # Use simple filename since account_id already contains token prefix
         self.cookies_file = os.path.join(self.session_dir, f"{account_id}_cookies.pkl")
         self.session_data_file = os.path.join(self.session_dir, f"{account_id}_session.pkl")
         
@@ -588,9 +668,43 @@ class SessionManager:
             # Suppress cookie save errors to avoid spam
             pass
     
+    def _find_matching_cookies_file(self) -> Optional[str]:
+        """Find cookies file that matches first 10 characters of current token"""
+        if not self.auth_token or len(self.auth_token) < 10:
+            return None
+            
+        os.makedirs(self.session_dir, exist_ok=True)
+        token_prefix = self.auth_token[:10]
+        
+        # Look for existing cookies files with same token prefix
+        target_filename = f"{token_prefix}_cookies.pkl"
+        target_path = os.path.join(self.session_dir, target_filename)
+        
+        if os.path.exists(target_path):
+            return target_path
+        
+        # Also check old format files for backward compatibility
+        for filename in os.listdir(self.session_dir):
+            if filename.endswith("_cookies.pkl") and token_prefix[:5].lower() in filename:
+                return os.path.join(self.session_dir, filename)
+        
+        return None
+    
     def load_cookies(self) -> dict:
         """Load cookies from file"""
         try:
+            # First try to find matching cookies based on token prefix
+            matching_file = self._find_matching_cookies_file()
+            if matching_file and os.path.exists(matching_file):
+                try:
+                    with open(matching_file, 'rb') as f:
+                        cookies = pickle.load(f)
+                        print(f"🍪 Loaded matching cookies for {self.account_id} (token: {self.auth_token[:10] if self.auth_token else 'none'})")
+                        return cookies
+                except Exception as e:
+                    print(f"⚠️ Failed to load matching cookies: {e}")
+            
+            # Try to load exact cookies file
             if os.path.exists(self.cookies_file):
                 with open(self.cookies_file, 'rb') as f:
                     cookies = pickle.load(f)
@@ -790,10 +904,11 @@ class AdvancedRateLimiter:
 class StealthSession:
     """Ultra-stealth HTTP session with TLS-Client and advanced anti-detection"""
     
-    def __init__(self, account_id: str, proxy_manager: 'ProxyManager' = None):
+    def __init__(self, account_id: str, proxy_manager: 'ProxyManager' = None, auth_token: str = None):
         self.account_id = account_id
-        self.fingerprint = EnhancedBrowserFingerprint(account_id)
-        self.session_manager = SessionManager(account_id)
+        self.auth_token = auth_token
+        self.fingerprint = EnhancedBrowserFingerprint(account_id, auth_token)
+        self.session_manager = SessionManager(account_id, auth_token)
         self.behavior_simulator = BehaviorSimulator(self.fingerprint)
         self.proxy_manager = proxy_manager
         self.rate_limiter = AdvancedRateLimiter()
@@ -1110,13 +1225,14 @@ class AntiDetectionManager:
         else:
             print(f"⚠️ TLS-Client not available, using enhanced requests")
     
-    def get_session(self, account_id: str) -> StealthSession:
+    def get_session(self, account_id: str, auth_token: str = None) -> StealthSession:
         """Get or create enhanced stealth session for account"""
         with self.session_lock:
             if account_id not in self.sessions:
                 self.sessions[account_id] = StealthSession(
                     account_id, 
-                    self.proxy_manager if self.proxy_manager.proxies else None
+                    self.proxy_manager if self.proxy_manager.proxies else None,
+                    auth_token
                 )
                 self.stats['sessions_created'] += 1
             return self.sessions[account_id]
@@ -1266,8 +1382,15 @@ def create_anti_detection_session(account_index: int, auth_token: str = None) ->
     if '_anti_detection_manager' not in globals():
         _anti_detection_manager = AntiDetectionManager()
     
-    account_id = f"account_{account_index}"
-    return _anti_detection_manager.get_session(account_id)
+    # Use first 10 characters of token as unique identifier if token provided
+    if auth_token and len(auth_token) >= 10:
+        token_prefix = auth_token[:10]
+        account_id = token_prefix
+    else:
+        # Fallback to account index if no token
+        account_id = f"account_{account_index}"
+    
+    return _anti_detection_manager.get_session(account_id, auth_token)
 
 def make_stealth_request(session: StealthSession, method: str, url: str, auth_token: str = None, api_type: str = "farcaster", **kwargs):
     """Make enhanced stealth request with proper headers"""
