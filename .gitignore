@@ -1,0 +1,28 @@
+# Sensitive user data
+sessions/
+account.txt
+proxy.txt
+
+# Runtime files
+link_hash.json
+temp_accounts/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Debug and test files
+debug_*.py
+test_*.py
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

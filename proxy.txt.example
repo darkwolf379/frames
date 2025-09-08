@@ -1,0 +1,5 @@
+# Example proxy format - optional
+# One proxy per line in format: ip:port:username:password
+# Leave empty if not using proxies
+# 123.456.789.10:8080:user:pass
+# 123.456.789.11:8080:user:pass
