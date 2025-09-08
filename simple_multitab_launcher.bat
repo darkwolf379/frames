@@ -85,6 +85,7 @@ echo import os
 echo import sys
 echo import time
 echo import json
+echo import toml
 echo from pathlib import Path
 echo.
 echo # Change to the correct directory
@@ -116,6 +117,26 @@ echo def main^(^):
 echo     """Main launcher function"""
 echo     print^(f"🚀 ACCOUNT %ACC_NUM% - FARCASTER AUTO SHARE + LIKE"^)
 echo     print^(f"{'='*60}"^)
+echo.
+echo     # Load config from config.toml
+echo     try:
+echo         with open^('config.toml', 'r', encoding='utf-8'^) as f:
+echo             config = toml.load^(f^)
+echo         shares_per_cycle = config['sharing']['num_shares']
+echo         share_delay_min = config['sharing']['share_delay_min']
+echo         share_delay_max = config['sharing']['share_delay_max']
+echo         like_delay_min = config['liking']['like_delay_min']
+echo         like_delay_max = config['liking']['like_delay_max']
+echo         cycle_delay = config['cycle']['cycle_delay_minutes'] * 60
+echo         print^(f"✅ Loaded config from config.toml"^)
+echo     except Exception as e:
+echo         print^(f"❌ Error loading config.toml: {{e}}"^)
+echo         shares_per_cycle = 1
+echo         share_delay_min = 10
+echo         share_delay_max = 30
+echo         like_delay_min = 2
+echo         like_delay_max = 5
+echo         cycle_delay = 900
 echo.    
 echo     # Load token
 echo     token = load_single_token^(^)
@@ -144,29 +165,29 @@ echo         print^(f"⛽ Checking fuel status..."^)
 echo         fuel = bot.check_fuel_status^(^)
 echo         print^(f"💰 Current fuel: {fuel}"^)
 echo.        
-echo         # Show configuration
-echo         print^(f"\n📋 CONFIGURATION:"^)
+echo         # Show configuration from config.toml
+echo         print^(f"\n📋 CONFIGURATION FROM CONFIG.TOML:"^)
 echo         print^(f"   Mode: infinite"^)
 echo         print^(f"   Save links: True"^)
 echo         print^(f"   Original text only: False"^)
-echo         print^(f"   Shares per cycle: 3"^)
-echo         print^(f"   Share delay: 10-30s"^)
-echo         print^(f"   Like delay: 2-5s"^)
-echo         print^(f"   Cycle delay: 15 minutes"^)
+echo         print^(f"   Shares per cycle: {shares_per_cycle}"^)
+echo         print^(f"   Share delay: {share_delay_min}-{share_delay_max}s"^)
+echo         print^(f"   Like delay: {like_delay_min}-{like_delay_max}s"^)
+echo         print^(f"   Cycle delay: {cycle_delay//60} minutes"^)
 echo.        
-echo         # Start infinite cycle automation
-echo         print^(f"\n🔄 Starting infinite cycle automation..."^)
+echo         # Start infinite cycle automation with config values
+echo         print^(f"\n🔄 Starting automation with config.toml values..."^)
 echo         print^(f"⛔ Press Ctrl+C to stop anytime"^)
 echo         cycle_based_share_like_automation^(
 echo             account_info,
-echo             3,
-echo             ^(10, 30^),
-echo             ^(2, 5^),
+echo             shares_per_cycle,
+echo             ^(share_delay_min, share_delay_max^),
+echo             ^(like_delay_min, like_delay_max^),
 echo             999,
-echo             900,
+echo             cycle_delay,
 echo             False,
 echo             True,
-echo             3
+echo             1
 echo         ^)
 echo.        
 echo     except KeyboardInterrupt:
