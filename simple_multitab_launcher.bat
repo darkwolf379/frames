@@ -30,6 +30,12 @@ if not exist "farcaster_auto_share_like.py" (
 echo ✅ All required files found
 echo.
 
+REM Clean up link_hash.json from previous sessions
+if exist "link_hash.json" (
+    echo 🧹 Cleaning up previous session data...
+    del "link_hash.json" >nul 2>&1
+)
+
 REM Create temp directory
 if not exist "temp_accounts" mkdir temp_accounts
 
@@ -130,7 +136,7 @@ echo         like_delay_max = config['liking']['like_delay_max']
 echo         cycle_delay = config['cycle']['cycle_delay_minutes'] * 60
 echo         print^(f"✅ Loaded config from config.toml"^)
 echo     except Exception as e:
-echo         print^(f"❌ Error loading config.toml: {{e}}"^)
+echo         print^(f"❌ Error loading config.toml: {e}"^)
 echo         shares_per_cycle = 1
 echo         share_delay_min = 10
 echo         share_delay_max = 30
@@ -174,11 +180,14 @@ echo         print^(f"   Shares per cycle: {shares_per_cycle}"^)
 echo         print^(f"   Share delay: {share_delay_min}-{share_delay_max}s"^)
 echo         print^(f"   Like delay: {like_delay_min}-{like_delay_max}s"^)
 echo         print^(f"   Cycle delay: {cycle_delay//60} minutes"^)
-echo.        
-echo         # Start infinite cycle automation with config values
-echo         print^(f"\n🔄 Starting automation with config.toml values..."^)
+echo.
+echo         # Import the clean independent automation function with auto-detection
+echo         from independent_clean import independent_cycle_automation_clean
+echo.
+echo         # Start infinite cycle automation with auto-detection link_hash.json
+echo         print^(f"\n🔄 Starting automation with auto-detection link_hash.json..."^)
 echo         print^(f"⛔ Press Ctrl+C to stop anytime"^)
-echo         cycle_based_share_like_automation^(
+echo         independent_cycle_automation_clean^(
 echo             account_info,
 echo             shares_per_cycle,
 echo             ^(share_delay_min, share_delay_max^),
@@ -187,11 +196,19 @@ echo             999,
 echo             cycle_delay,
 echo             False,
 echo             True,
-echo             1
+echo             2
 echo         ^)
 echo.        
 echo     except KeyboardInterrupt:
 echo         print^(f"\n⛔ Account %ACC_NUM%: Stopped by user"^)
+echo         # Cleanup link_hash.json on manual stop
+echo         try:
+echo             import os
+echo             if os.path.exists^("link_hash.json"^):
+echo                 os.remove^("link_hash.json"^)
+echo                 print^(f"🧹 Cleaned up link_hash.json"^)
+echo         except:
+echo             pass
 echo     except Exception as e:
 echo         print^(f"\n❌ Account %ACC_NUM%: Error - {e}"^)
 echo     finally:
