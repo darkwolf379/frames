@@ -32,30 +32,43 @@ echo.
 
 REM Clean up link_hash.json from previous sessions
 if exist "link_hash.json" (
-    echo 🧹 Cleaning up previous session data...
+    echo 🧹 Cleaning up previous session data.
     del "link_hash.json" >nul 2>&1
 )
 
 REM Create temp directory
 if not exist "temp_accounts" mkdir temp_accounts
 
-REM Read tokens from account.txt and launch tabs
+REM First pass: Count total valid accounts
+set TOTAL_ACCOUNTS=0
+for /f "usebackq tokens=*" %%a in ("account.txt") do (
+    set TOKEN=%%a
+    REM Skip empty lines and comments
+    if not "!TOKEN!"=="" if not "!TOKEN:~0,1!"=="#" (
+        set /a TOTAL_ACCOUNTS+=1
+    )
+)
+
+echo 📊 Total valid accounts detected: !TOTAL_ACCOUNTS!
+echo.
+
+REM Second pass: Read tokens from account.txt and launch tabs
 set ACCOUNT_NUM=1
 
 for /f "usebackq tokens=*" %%a in ("account.txt") do (
     set TOKEN=%%a
     REM Skip empty lines and comments
     if not "!TOKEN!"=="" if not "!TOKEN:~0,1!"=="#" (
-        echo 🔧 Setting up Account !ACCOUNT_NUM!...
+        echo 🔧 Setting up Account !ACCOUNT_NUM!.
         
         REM Create individual account file
         echo !TOKEN! > "temp_accounts\account_!ACCOUNT_NUM!.txt"
         
-        REM Create launcher script for this account
-        call :CREATE_LAUNCHER !ACCOUNT_NUM!
+        REM Create launcher script for this account with total accounts info
+        call :CREATE_LAUNCHER !ACCOUNT_NUM! !TOTAL_ACCOUNTS!
         
         REM Launch CMD tab
-        echo ✅ Launching CMD tab for Account !ACCOUNT_NUM!...
+        echo ✅ Launching CMD tab for Account !ACCOUNT_NUM!.
         start "Farcaster Account !ACCOUNT_NUM!" cmd /k "cd /d "%CD%" & title Farcaster Account !ACCOUNT_NUM! & mode con cols=120 lines=30 & color 0A & python temp_accounts\launcher_account_!ACCOUNT_NUM!.py"
         
         REM Wait between launches
@@ -79,12 +92,13 @@ goto :EOF
 
 :CREATE_LAUNCHER
 set ACC_NUM=%1
+set TOTAL_ACCOUNTS=%2
 
 REM Create Python launcher script for this account
 (
 echo #!/usr/bin/env python3
 echo """
-echo Auto-generated launcher for Account %ACC_NUM%
+echo Auto-generated launcher for Account %ACC_NUM% of %TOTAL_ACCOUNTS%
 echo """
 echo.
 echo import os
@@ -106,7 +120,7 @@ echo     from farcaster_auto_share_like import *
 echo     print^("✅ Successfully imported farcaster_auto_share_like"^)
 echo except ImportError as e:
 echo     print^(f"❌ Import error: {e}"^)
-echo     input^("Press Enter to exit..."^)
+echo     input^("Press Enter to exit."^)
 echo     sys.exit^(1^)
 echo.
 echo def load_single_token^(^):
@@ -148,7 +162,7 @@ echo     # Load token
 echo     token = load_single_token^(^)
 echo     if not token:
 echo         print^("❌ Failed to load token!"^)
-echo         input^("Press Enter to exit..."^)
+echo         input^("Press Enter to exit."^)
 echo         return
 echo.
 echo     # Create account info
@@ -156,18 +170,18 @@ echo     account_info = [{'index': %ACC_NUM%, 'token': token}]
 echo.
 echo     try:
 echo         # Initialize bot to get user info
-echo         print^(f"🔍 Initializing Account %ACC_NUM%..."^)
+echo         print^(f"🔍 Initializing Account %ACC_NUM%."^)
 echo         bot = FarcasterAutoShareLike^(token, %ACC_NUM%, True^)
 echo.        
 echo         if not bot.user_id:
 echo             print^(f"❌ Account %ACC_NUM%: Failed to detect user info!"^)
-echo             input^("Press Enter to exit..."^)
+echo             input^("Press Enter to exit."^)
 echo             return
 echo.        
 echo         print^(f"✅ Account %ACC_NUM%: @{bot.username} ^(ID: {bot.user_id}^)"^)
 echo.        
 echo         # Check fuel
-echo         print^(f"⛽ Checking fuel status..."^)
+echo         print^(f"⛽ Checking fuel status."^)
 echo         fuel = bot.check_fuel_status^(^)
 echo         print^(f"💰 Current fuel: {fuel}"^)
 echo.        
@@ -185,7 +199,7 @@ echo         # Import the clean independent automation function with auto-detect
 echo         from independent_clean import independent_cycle_automation_clean
 echo.
 echo         # Start infinite cycle automation with auto-detection link_hash.json
-echo         print^(f"\n🔄 Starting automation with auto-detection link_hash.json..."^)
+echo         print^(f"\n🔄 Starting automation with auto-detection link_hash.json."^)
 echo         print^(f"⛔ Press Ctrl+C to stop anytime"^)
 echo         independent_cycle_automation_clean^(
 echo             account_info,
@@ -196,7 +210,7 @@ echo             999,
 echo             cycle_delay,
 echo             False,
 echo             True,
-echo             2
+echo             %TOTAL_ACCOUNTS%
 echo         ^)
 echo.        
 echo     except KeyboardInterrupt:
@@ -213,7 +227,7 @@ echo     except Exception as e:
 echo         print^(f"\n❌ Account %ACC_NUM%: Error - {e}"^)
 echo     finally:
 echo         print^(f"\n🏁 Account %ACC_NUM%: Session ended"^)
-echo         input^("Press Enter to close this window..."^)
+echo         input^("Press Enter to close this window."^)
 echo.
 echo if __name__ == "__main__":
 echo     main^(^)

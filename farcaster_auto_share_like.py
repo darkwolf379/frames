@@ -152,39 +152,16 @@ def wait_for_cycle_completion(cycle, expected_accounts, expected_shares_per_acco
             remaining = max_wait_seconds - elapsed
             print(f"{colored_text(f'⏰ Progress: {accounts_done}/{expected_accounts} accounts | Waiting {remaining}s...', Colors.YELLOW)}")
             
-            # Give user option to switch to traditional mode after some time
-            if elapsed > 60 and elapsed % 60 == 0:  # Every minute after first minute
-                print(f"\n{colored_text('💡 No new shares detected. Options:', Colors.CYAN)}")
-                print(f"{colored_text('  1. Continue waiting for multi-tab processes', Colors.CYAN)}")
-                print(f"{colored_text('  2. Switch to traditional mode (run shares in this script)', Colors.CYAN)}")
-                print(f"{colored_text('  3. Skip this cycle', Colors.CYAN)}")
-                
-                choice = input(f"{colored_text('Choose option (1/2/3) or press Enter to continue waiting: ', Colors.YELLOW)}").strip()
-                if choice == '2':
-                    return 'traditional'
-                elif choice == '3':
-                    return False
-                # choice == '1' or empty continues waiting
-            
+            # Continue waiting without showing options menu
             time.sleep(check_interval)
         
         # Timeout reached
         final_completed, final_accounts = check_cycle_completion(cycle, expected_accounts)
         print(f"\n{colored_text(f'⚠️ Timeout reached! Only {final_accounts}/{expected_accounts} accounts completed', Colors.RED)}")
+        print(f"{colored_text('📋 Auto-continuing with available accounts...', Colors.YELLOW)}")
         
-        # Ask user if they want to continue anyway or switch mode
-        print(f"\n{colored_text('Options:', Colors.CYAN)}")
-        print(f"{colored_text('  y - Continue with incomplete cycle', Colors.CYAN)}")
-        print(f"{colored_text('  t - Switch to traditional mode', Colors.CYAN)}")
-        print(f"{colored_text('  n - Skip this cycle', Colors.CYAN)}")
-        
-        choice = input(f"{colored_text('Your choice (y/t/n): ', Colors.YELLOW)}").strip().lower()
-        if choice == 't':
-            return 'traditional'
-        elif choice in ['y', 'yes']:
-            return True
-        else:
-            return False
+        # Auto-continue with whatever accounts completed
+        return True
         
     except Exception as e:
         print(f"{colored_text(f'❌ Error waiting for cycle completion: {e}', Colors.RED)}")
@@ -461,7 +438,38 @@ class FarcasterAutoShareLike:
             "My mech needs energy! ⚡\nHelp me by liking this cast! 🔋\nWreck League versus mode activated! 🤖",
             "Battle-ready mech seeking fuel! 🛡️\nYour support powers my victories! 🏆\n5 likes = 1 precious fuel ⛽",
             "Charging up for the next fight! ⚡\nLike = Fuel = Victory! 🎯\nWreck League champion in the making! 🤖",
-            "Fuel crisis! SOS! 🆘\nNeed likes to power my mech! 🔋\nEvery like brings me closer to victory! 🏅"
+            "Fuel crisis! SOS! 🆘\nNeed likes to power my mech! 🔋\nEvery like brings me closer to victory! 🏅",
+            "🤖 Mech pilot needs backup! Your like = My survival fuel! ⛽\nWreck League battlefield awaits brave warriors! ⚔️",
+            "🔋 Battery low! Emergency fuel request! 🚨\nEach like saves my mech from destruction! 💥\nWreck League heroes unite! 🛡️",
+            "⚡ Energy cores depleted! Mission critical fuel needed! 🎯\nSupport my mech army in Wreck League! 🤖\n5 likes = 1 power cell! 🔋",
+            "🛸 Space mech running on fumes! 🌌\nYour likes fuel my intergalactic battles! ⭐\nWreck League: where legends are born! 🏆",
+            "🔥 Fusion reactor needs more power! Nuclear fuel required! ☢️\nLike this cast to prevent meltdown! 💣\nWreck League: Ultimate mech warfare! ⚔️",
+            "🚀 Rocket boosters failing! Need fuel injection! 💫\nEvery like = Extra horsepower for my mech! 🏎️\nWreck League speed demons assemble! 🏁",
+            "⚙️ Mechanical warfare specialist seeks fuel! 🔧\nYour support powers my combat systems! 💪\nWreck League: Engineering meets destruction! 🏗️",
+            "🌪️ Storm trooper mech low on juice! ⛈️\nWeather the battle with your likes! 🌈\nWreck League: Survive the chaos! 🌊",
+            "🎮 Gaming fuel running empty! Controller needs power! 🕹️\nLike to keep the game alive! 🎲\nWreck League: Play to dominate! 👑",
+            "🦾 Cyborg enhancement requires energy! 🧬\nYour likes upgrade my battle systems! 📈\nWreck League: Evolution through combat! 🔬",
+            "🏟️ Arena champion needs crowd support! 📣\nFuel me with your likes for the next match! 🥊\nWreck League: Gladiators of the future! ⚡",
+            "🛡️ Defense systems offline! Shield generator needs fuel! 🔒\nProtect me with your likes! 🛡️\nWreck League: Last line of defense! 🏰",
+            "🎯 Precision targeting requires fuel calibration! 🔫\nYour likes enhance my accuracy! 🎪\nWreck League: Every shot counts! 💯",
+            "🌟 Stellar fuel reserves depleted! Star power needed! ✨\nShine your likes on my mech! 🌠\nWreck League: Cosmic battles await! 🚀",
+            "⚗️ Alchemy lab needs magical fuel! 🧪\nTransmute your likes into victory! 💎\nWreck League: Science meets magic! 🔮",
+            "🎪 Circus mech performer needs audience energy! 🎭\nApplaud with likes for the greatest show! 👏\nWreck League: Entertainment warfare! 🎨",
+            "🏔️ Mountain climber mech needs altitude fuel! ⛰️\nElevate me with your likes to new heights! 🧗\nWreck League: Conquer every summit! 🏔️",
+            "🌊 Deep sea exploration mech needs pressure fuel! 🐙\nDive deeper with your like support! 🤿\nWreck League: Underwater adventures! 🐠",
+            "🔥 Phoenix mech rising from ashes! 🦅\nRebirth requires fuel from your likes! 🔥\nWreck League: Legendary comebacks! ⚡",
+            "🎵 Musical mech needs rhythm fuel! 🎶\nHarmonize with likes for perfect beats! 🎤\nWreck League: Symphony of destruction! 🎼",
+            "🍕 Pizza-powered mech needs cheesy fuel! 🧀\nSlice me some likes for extra toppings! 🍕\nWreck League: Tasty battles ahead! 🌶️",
+            "☕ Coffee-fueled mech needs caffeine boost! ☕\nPerk me up with your energizing likes! ⚡\nWreck League: Stay awake and fight! 😴",
+            "🎂 Birthday mech wishes for fuel gifts! 🎁\nCelebrate with likes for another year! 🎉\nWreck League: Party like champions! 🥳",
+            "🌙 Lunar mech needs moonbeam fuel! 🌙\nIlluminate my path with stellar likes! ⭐\nWreck League: Midnight warrior mode! 🦇",
+            "🎪 Magical mech needs enchantment fuel! ✨\nCast your like spells for mystic power! 🔮\nWreck League: Wizardry meets technology! 🧙",
+            "🏎️ Racing mech needs turbo fuel! 🏁\nBoost my speed with lightning likes! ⚡\nWreck League: Formula destruction racing! 🏆",
+            "🦸 Superhero mech needs heroic fuel! 🦸‍♂️\nSave the day with your powerful likes! 💪\nWreck League: Justice through combat! ⚖️",
+            "🎯 Sniper mech needs precision fuel! 🔭\nLock onto victory with targeted likes! 🎯\nWreck League: One shot, one kill! 💥",
+            "🌈 Rainbow mech needs spectrum fuel! 🌈\nColor my world with vibrant likes! 🎨\nWreck League: Paint the battlefield! 🖌️",
+            "🔮 Crystal mech needs gem-powered fuel! 💎\nAmplify my energy with precious likes! ✨\nWreck League: Sparkle with power! 💍",
+            "🎭 Theater mech needs dramatic fuel! 🎬\nApplause with likes for the best performance! 👏\nWreck League: All the world's a stage! 🎪"
         ]
         
         variations = [
@@ -469,7 +477,22 @@ class FarcasterAutoShareLike:
             "\n\n⚔️ Fight with me: ",
             "\n\n🤖 Mech arena: ",
             "\n\n🔥 Battle zone: ",
-            "\n\n⚡ Energy boost: "
+            "\n\n⚡ Energy boost: ",
+            "\n\n🚀 Launch sequence: ",
+            "\n\n🛡️ Defense mode: ",
+            "\n\n💥 Combat ready: ",
+            "\n\n🎯 Target locked: ",
+            "\n\n🌟 Victory awaits: ",
+            "\n\n🔋 Power up now: ",
+            "\n\n⚡ Fuel injection: ",
+            "\n\n🌊 Dive deeper: ",
+            "\n\n🏆 Champion mode: ",
+            "\n\n🎪 Show time: ",
+            "\n\n🎵 Battle rhythm: ",
+            "\n\n🌈 Spectrum war: ",
+            "\n\n🔮 Magic portal: ",
+            "\n\n🎭 Final act: ",
+            "\n\n🦸 Hero call: "
         ]
         
         # Select base text and variation

@@ -38,6 +38,16 @@ except ImportError:
     FAKE_UA_AVAILABLE = False
     print("⚠️ Fake-UserAgent not available - install with: pip install fake-useragent")
 
+# HTML/XML parsing for advanced detection
+try:
+    from bs4 import BeautifulSoup
+    from lxml import html, etree
+    HTML_PARSER_AVAILABLE = True
+    print("✅ HTML Parsers loaded - Advanced detection enabled")
+except ImportError:
+    HTML_PARSER_AVAILABLE = False
+    print("⚠️ HTML Parsers not available - install with: pip install beautifulsoup4 lxml")
+
 # Fallback imports
 # Fallback imports
 import requests
@@ -109,13 +119,23 @@ class EnhancedBrowserFingerprint:
         'page_load_wait': (1.5, 4.0)
     }
     
+    def _sanitize_filename(self, filename: str) -> str:
+        """Sanitize filename by removing/replacing invalid characters"""
+        # Replace invalid Windows filename characters
+        invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+        safe_filename = filename
+        for char in invalid_chars:
+            safe_filename = safe_filename.replace(char, '_')
+        return safe_filename
+    
     def __init__(self, account_id: str = None, auth_token: str = None):
         self.account_id = account_id or str(uuid.uuid4())
         self.auth_token = auth_token
         self.session_dir = "sessions"
         
-        # Use simple filename since account_id already contains token prefix
-        self.session_file = os.path.join(self.session_dir, f"{self.account_id}_fingerprint.pkl")
+        # Sanitize account_id for safe filename usage
+        safe_account_id = self._sanitize_filename(self.account_id)
+        self.session_file = os.path.join(self.session_dir, f"{safe_account_id}_fingerprint.pkl")
         
         # Initialize fake user agent if available
         if FAKE_UA_AVAILABLE:
@@ -145,16 +165,20 @@ class EnhancedBrowserFingerprint:
         os.makedirs(self.session_dir, exist_ok=True)
         token_prefix = self.auth_token[:10]
         
+        # Sanitize token prefix for safe filename usage
+        safe_token_prefix = self._sanitize_filename(token_prefix)
+        
         # Look for existing fingerprint files with same token prefix
-        target_filename = f"{token_prefix}_fingerprint.pkl"
+        target_filename = f"{safe_token_prefix}_fingerprint.pkl"
         target_path = os.path.join(self.session_dir, target_filename)
         
         if os.path.exists(target_path):
             return target_path
         
         # Also check old format files for backward compatibility
+        safe_token_partial = self._sanitize_filename(token_prefix[:5].lower())
         for filename in os.listdir(self.session_dir):
-            if filename.endswith("_fingerprint.pkl") and token_prefix[:5].lower() in filename:
+            if filename.endswith("_fingerprint.pkl") and safe_token_partial in filename:
                 return os.path.join(self.session_dir, filename)
         
         return None
@@ -646,11 +670,21 @@ class SessionManager:
         self.auth_token = auth_token
         self.session_dir = "sessions"
         
-        # Use simple filename since account_id already contains token prefix
-        self.cookies_file = os.path.join(self.session_dir, f"{account_id}_cookies.pkl")
-        self.session_data_file = os.path.join(self.session_dir, f"{account_id}_session.pkl")
+        # Sanitize account_id for safe filename usage
+        safe_account_id = self._sanitize_filename(account_id)
+        self.cookies_file = os.path.join(self.session_dir, f"{safe_account_id}_cookies.pkl")
+        self.session_data_file = os.path.join(self.session_dir, f"{safe_account_id}_session.pkl")
         
         os.makedirs(self.session_dir, exist_ok=True)
+    
+    def _sanitize_filename(self, filename: str) -> str:
+        """Sanitize filename by removing/replacing invalid characters"""
+        # Replace invalid Windows filename characters
+        invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+        safe_filename = filename
+        for char in invalid_chars:
+            safe_filename = safe_filename.replace(char, '_')
+        return safe_filename
     
     def save_cookies(self, cookies_dict: dict):
         """Save cookies to file with duplicate filtering"""
@@ -676,16 +710,20 @@ class SessionManager:
         os.makedirs(self.session_dir, exist_ok=True)
         token_prefix = self.auth_token[:10]
         
+        # Sanitize token prefix for safe filename usage
+        safe_token_prefix = self._sanitize_filename(token_prefix)
+        
         # Look for existing cookies files with same token prefix
-        target_filename = f"{token_prefix}_cookies.pkl"
+        target_filename = f"{safe_token_prefix}_cookies.pkl"
         target_path = os.path.join(self.session_dir, target_filename)
         
         if os.path.exists(target_path):
             return target_path
         
         # Also check old format files for backward compatibility
+        safe_token_partial = self._sanitize_filename(token_prefix[:5].lower())
         for filename in os.listdir(self.session_dir):
-            if filename.endswith("_cookies.pkl") and token_prefix[:5].lower() in filename:
+            if filename.endswith("_cookies.pkl") and safe_token_partial in filename:
                 return os.path.join(self.session_dir, filename)
         
         return None
@@ -1199,11 +1237,186 @@ class StealthSession:
         except Exception as e:
             print(f"⚠️ Error closing session: {e}")
 
+class HTMLDetectionAnalyzer:
+    """Advanced HTML parsing for detection analysis"""
+    
+    def __init__(self):
+        self.detection_patterns = {
+            'captcha': [
+                'captcha', 'recaptcha', 'hcaptcha', 'cloudflare',
+                'challenge', 'verification', 'prove you are human'
+            ],
+            'blocked': [
+                'access denied', 'blocked', 'forbidden', 'rate limit',
+                'too many requests', 'temporarily unavailable'
+            ],
+            'suspicious': [
+                'suspicious activity', 'unusual behavior', 'automated',
+                'bot detected', 'please verify'
+            ]
+        }
+    
+    def analyze_response(self, response) -> Dict:
+        """Analyze HTTP response for detection indicators"""
+        if not HTML_PARSER_AVAILABLE:
+            return {'parser_available': False}
+            
+        analysis = {
+            'status_code': response.status_code,
+            'content_type': response.headers.get('content-type', ''),
+            'detection_score': 0,
+            'indicators': [],
+            'parser_available': True
+        }
+        
+        try:
+            # Parse HTML content
+            if 'text/html' in analysis['content_type']:
+                soup = BeautifulSoup(response.text, 'lxml')
+                analysis.update(self._analyze_html(soup))
+            
+            # Parse JSON errors
+            elif 'application/json' in analysis['content_type']:
+                try:
+                    json_data = response.json()
+                    analysis.update(self._analyze_json_errors(json_data))
+                except:
+                    pass
+                    
+        except Exception as e:
+            analysis['parse_error'] = str(e)
+            
+        return analysis
+    
+    def _analyze_html(self, soup) -> Dict:
+        """Analyze HTML soup for detection patterns"""
+        indicators = []
+        detection_score = 0
+        
+        # Check page title
+        title = soup.find('title')
+        if title:
+            title_text = title.text.lower()
+            for category, patterns in self.detection_patterns.items():
+                for pattern in patterns:
+                    if pattern in title_text:
+                        indicators.append(f'Title contains: {pattern}')
+                        detection_score += 10
+        
+        # Check for captcha forms
+        captcha_forms = soup.find_all('form', {'id': lambda x: x and 'captcha' in x.lower()})
+        if captcha_forms:
+            indicators.append(f'Found {len(captcha_forms)} captcha forms')
+            detection_score += 25
+        
+        # Check for challenge divs
+        challenge_divs = soup.find_all('div', class_=lambda x: x and any(
+            term in str(x).lower() for term in ['challenge', 'verification', 'cloudflare']
+        ))
+        if challenge_divs:
+            indicators.append(f'Found {len(challenge_divs)} challenge elements')
+            detection_score += 20
+        
+        # Check meta tags for detection
+        meta_tags = soup.find_all('meta', {'name': lambda x: x and 'robots' in x.lower()})
+        for meta in meta_tags:
+            content = meta.get('content', '').lower()
+            if 'noindex' in content or 'nofollow' in content:
+                indicators.append('Robots meta restriction found')
+                detection_score += 5
+        
+        # Check for error messages
+        error_divs = soup.find_all('div', class_=lambda x: x and 'error' in str(x).lower())
+        for error_div in error_divs:
+            error_text = error_div.text.lower()
+            for category, patterns in self.detection_patterns.items():
+                for pattern in patterns:
+                    if pattern in error_text:
+                        indicators.append(f'Error message: {pattern}')
+                        detection_score += 15
+        
+        return {
+            'indicators': indicators,
+            'detection_score': detection_score,
+            'captcha_forms': len(captcha_forms),
+            'challenge_elements': len(challenge_divs)
+        }
+    
+    def _analyze_json_errors(self, json_data) -> Dict:
+        """Analyze JSON response for error indicators"""
+        indicators = []
+        detection_score = 0
+        
+        # Common error fields
+        error_fields = ['error', 'message', 'detail', 'reason', 'status']
+        
+        for field in error_fields:
+            if field in json_data:
+                error_text = str(json_data[field]).lower()
+                for category, patterns in self.detection_patterns.items():
+                    for pattern in patterns:
+                        if pattern in error_text:
+                            indicators.append(f'JSON error: {pattern}')
+                            detection_score += 10
+        
+        return {
+            'indicators': indicators,
+            'detection_score': detection_score,
+            'json_errors': True
+        }
+    
+    def is_detection_response(self, response) -> bool:
+        """Quick check if response indicates detection"""
+        analysis = self.analyze_response(response)
+        return analysis.get('detection_score', 0) > 15
+    
+    def extract_frame_data(self, html_content: str) -> Dict:
+        """Extract Farcaster Frame metadata from HTML"""
+        if not HTML_PARSER_AVAILABLE:
+            return {'parser_available': False}
+            
+        try:
+            tree = html.fromstring(html_content)
+            
+            # Extract Open Graph data
+            og_data = {}
+            og_metas = tree.xpath('//meta[@property and starts-with(@property, "og:")]')
+            for meta in og_metas:
+                prop = meta.get('property')
+                content = meta.get('content')
+                if prop and content:
+                    og_data[prop] = content
+            
+            # Extract Farcaster Frame data
+            fc_data = {}
+            fc_metas = tree.xpath('//meta[@property and starts-with(@property, "fc:frame")]')
+            for meta in fc_metas:
+                prop = meta.get('property')
+                content = meta.get('content')
+                if prop and content:
+                    fc_data[prop] = content
+            
+            return {
+                'parser_available': True,
+                'open_graph': og_data,
+                'farcaster_frame': fc_data,
+                'has_frame_data': len(fc_data) > 0
+            }
+            
+        except Exception as e:
+            return {
+                'parser_available': True,
+                'error': str(e),
+                'open_graph': {},
+                'farcaster_frame': {}
+            }
+
 class AntiDetectionManager:
     """Enhanced anti-detection manager with comprehensive features"""
     
     def __init__(self, proxy_file: str = "proxy.txt"):
         self.proxy_manager = ProxyManager(proxy_file)
+        self.html_analyzer = HTMLDetectionAnalyzer()
         self.sessions = {}
         self.session_lock = threading.Lock()
         self.stats = {
@@ -1211,7 +1424,9 @@ class AntiDetectionManager:
             'requests_made': 0,
             'successful_requests': 0,
             'failed_requests': 0,
-            'proxy_switches': 0
+            'proxy_switches': 0,
+            'detections_analyzed': 0,
+            'captcha_detected': 0
         }
         
         print(f"🛡️ Enhanced Anti-Detection Manager initialized")
@@ -1256,6 +1471,40 @@ class AntiDetectionManager:
             self.stats['failed_requests'] += 1
             raise e
     
+    def analyze_response_detection(self, response) -> Dict:
+        """Analyze response for detection indicators using HTML parsing"""
+        self.stats['detections_analyzed'] += 1
+        
+        analysis = self.html_analyzer.analyze_response(response)
+        
+        # Update stats based on analysis
+        if analysis.get('detection_score', 0) > 15:
+            self.stats['captcha_detected'] += 1
+            
+        return analysis
+    
+    def make_smart_request(self, account_id: str, method: str, url: str, **kwargs):
+        """Enhanced request with automatic detection analysis"""
+        response = self.make_request(account_id, method, url, **kwargs)
+        
+        # Analyze for detection
+        detection_analysis = self.analyze_response_detection(response)
+        
+        # Add analysis to response object for debugging
+        response.detection_analysis = detection_analysis
+        
+        # Log if detection found
+        if detection_analysis.get('detection_score', 0) > 15:
+            print(f"🚨 Detection indicators found for {account_id}:")
+            for indicator in detection_analysis.get('indicators', []):
+                print(f"   • {indicator}")
+        
+        return response
+    
+    def extract_frame_metadata(self, html_content: str) -> Dict:
+        """Extract Farcaster Frame metadata from HTML content"""
+        return self.html_analyzer.extract_frame_data(html_content)
+
     def test_all_proxies(self) -> Dict:
         """Test all proxies and return comprehensive statistics"""
         if not self.proxy_manager.proxies:
@@ -1432,6 +1681,42 @@ def cleanup_all_sessions():
     if '_anti_detection_manager' in globals():
         _anti_detection_manager.cleanup_all_sessions()
 
+def analyze_response_for_detection(response) -> Dict:
+    """Standalone function to analyze response for detection indicators"""
+    global _anti_detection_manager
+    
+    if '_anti_detection_manager' not in globals():
+        _anti_detection_manager = AntiDetectionManager()
+    
+    return _anti_detection_manager.analyze_response_detection(response)
+
+def extract_farcaster_frame_data(html_content: str) -> Dict:
+    """Extract Farcaster Frame metadata from HTML content"""
+    global _anti_detection_manager
+    
+    if '_anti_detection_manager' not in globals():
+        _anti_detection_manager = AntiDetectionManager()
+    
+    return _anti_detection_manager.extract_frame_metadata(html_content)
+
+def is_response_detected(response) -> bool:
+    """Quick check if response indicates bot detection"""
+    global _anti_detection_manager
+    
+    if '_anti_detection_manager' not in globals():
+        _anti_detection_manager = AntiDetectionManager()
+    
+    return _anti_detection_manager.html_analyzer.is_detection_response(response)
+
+def make_enhanced_request(account_id: str, method: str, url: str, **kwargs):
+    """Enhanced request with automatic detection analysis"""
+    global _anti_detection_manager
+    
+    if '_anti_detection_manager' not in globals():
+        _anti_detection_manager = AntiDetectionManager()
+    
+    return _anti_detection_manager.make_smart_request(account_id, method, url, **kwargs)
+
 # Example usage and testing
 if __name__ == "__main__":
     import sys
@@ -1573,6 +1858,11 @@ if __name__ == "__main__":
             print("  ✅ Fake-UserAgent - Dynamic user agent rotation")
         else:
             print("  ❌ Fake-UserAgent - Install with: pip install fake-useragent")
+        
+        if HTML_PARSER_AVAILABLE:
+            print("  ✅ HTML Parsers - Advanced detection analysis & frame parsing")
+        else:
+            print("  ❌ HTML Parsers - Install with: pip install beautifulsoup4 lxml")
         
         print("  ✅ Session Persistence - Cookie and state management")
         print("  ✅ Behavioral Simulation - Human-like timing patterns")
