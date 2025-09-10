@@ -253,9 +253,15 @@ class FarcasterAutoShareLike:
         # Initialize anti-detection session
         if ANTI_DETECTION_AVAILABLE:
             self.stealth_session = create_anti_detection_session(account_index, authorization_token)
+            # Always create fallback session as backup
+            self.fallback_session = requests.Session()
             print(f"🛡️ Account {account_index}: Anti-detection session initialized")
+            print(f"🔄 Account {account_index}: Fallback session ready as backup")
         else:
             self.stealth_session = None
+            # Create persistent fallback session
+            self.fallback_session = requests.Session()
+            print(f"⚠️ Account {account_index}: Using fallback session (no anti-detection)")
         
         # Detect user info from token
         self.detect_user_info()
@@ -271,29 +277,54 @@ class FarcasterAutoShareLike:
             "accept-language": "en-US,en;q=0.9",
             "authorization": f"Bearer {self.authorization_token}",
             "content-type": "application/json",
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
+            "origin": "https://warpcast.com",
+            "referer": "https://warpcast.com/",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors", 
+            "sec-fetch-site": "same-site",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
         }
 
     def make_request(self, method, url, **kwargs):
-        """Make request with anti-detection if available"""
+        """Make request with anti-detection if available, fallback to session"""
+        # Try anti-detection first if available
         if self.stealth_session and ANTI_DETECTION_AVAILABLE:
-            # Use anti-detection system
-            api_type = "wreck" if "wreckleague.xyz" in url else "farcaster"
-            return make_stealth_request(
-                self.stealth_session, 
-                method, 
-                url, 
-                self.authorization_token, 
-                api_type,
-                **kwargs
-            )
+            try:
+                api_type = "wreck" if "wreckleague.xyz" in url else "farcaster"
+                return make_stealth_request(
+                    self.stealth_session, 
+                    method, 
+                    url, 
+                    self.authorization_token, 
+                    api_type,
+                    **kwargs
+                )
+            except Exception as e:
+                print(f"⚠️ Account {self.account_index}: Anti-detection failed, using fallback: {e}")
+                # Fall through to fallback session
+        
+        # Use persistent fallback session with proper headers
+        headers = kwargs.get('headers', {})
+        headers.update(self.base_headers)
+        kwargs['headers'] = headers
+        kwargs.setdefault('timeout', 10)
+        
+        # Always try fallback session first, then raw requests as last resort
+        if self.fallback_session:
+            return self.fallback_session.request(method, url, **kwargs)
         else:
-            # Fallback to regular requests
-            headers = kwargs.get('headers', {})
-            headers.update(self.base_headers)
-            kwargs['headers'] = headers
-            kwargs.setdefault('timeout', 10)
             return requests.request(method, url, **kwargs)
+
+    def cleanup_session(self):
+        """Clean up session resources"""
+        try:
+            if self.stealth_session and hasattr(self.stealth_session, 'close'):
+                self.stealth_session.close()
+            if self.fallback_session:
+                self.fallback_session.close()
+            print(f"🧹 Account {self.account_index}: Session cleaned up")
+        except Exception as e:
+            print(f"⚠️ Account {self.account_index}: Cleanup error: {e}")
 
     def detect_user_info(self):
         """Auto-detect user info dari authorization token"""

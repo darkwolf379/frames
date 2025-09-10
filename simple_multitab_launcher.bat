@@ -71,8 +71,10 @@ for /f "usebackq tokens=*" %%a in ("account.txt") do (
         echo ✅ Launching CMD tab for Account !ACCOUNT_NUM!.
         start "Farcaster Account !ACCOUNT_NUM!" cmd /k "cd /d "%CD%" & title Farcaster Account !ACCOUNT_NUM! & mode con cols=120 lines=30 & color 0A & python temp_accounts\launcher_account_!ACCOUNT_NUM!.py"
         
-        REM Wait between launches
-        timeout /t 3 /nobreak >nul
+        REM Wait between launches with random delay (10-30 seconds)
+        set /a "RANDOM_DELAY=10 + !RANDOM! %% 21"
+        echo ⏳ Waiting !RANDOM_DELAY! seconds before next account.
+        timeout /t !RANDOM_DELAY! /nobreak >nul
         
         set /a ACCOUNT_NUM+=1
     )
@@ -194,6 +196,13 @@ echo         print^(f"   Shares per cycle: {shares_per_cycle}"^)
 echo         print^(f"   Share delay: {share_delay_min}-{share_delay_max}s"^)
 echo         print^(f"   Like delay: {like_delay_min}-{like_delay_max}s"^)
 echo         print^(f"   Cycle delay: {cycle_delay//60} minutes"^)
+echo.
+echo         # Add random startup delay to avoid simultaneous starts
+echo         import random
+echo         import time
+echo         startup_delay = random.randint^(30, 120^)
+echo         print^(f"⏳ Account %ACC_NUM%: Random startup delay {startup_delay}s for stealth..."^)
+echo         time.sleep^(startup_delay^)
 echo.
 echo         # Import the clean independent automation function with auto-detection
 echo         from independent_clean import independent_cycle_automation_clean
