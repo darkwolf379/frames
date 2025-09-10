@@ -3,7 +3,7 @@
 Independent Cycle Automation - Clean implementation
 """
 
-def independent_cycle_automation_clean(account_info_list, num_shares=5, share_delay_range=(10, 30), like_delay_range=(2, 5), cycles=5, cycle_delay=300, use_original_only=False, save_links=False, expected_accounts=None):
+def independent_cycle_automation_clean(account_info_list, num_shares=5, share_delay_range=(10, 30), like_delay_range=(2, 5), cycles=5, cycle_delay=(300, 900), use_original_only=False, save_links=False, expected_accounts=None):
     """Run FULLY INDEPENDENT cycle automation - each tab works independently, only checks link_hash.json"""
     try:
         # Import required modules (local imports to avoid conflicts)
@@ -30,7 +30,16 @@ def independent_cycle_automation_clean(account_info_list, num_shares=5, share_de
         print(f"\n{colored_text(f'🔄 INDEPENDENT CYCLE AUTOMATION - ACCOUNT {account_index}', Colors.BOLD + Colors.CYAN)}")
         print(f"{colored_text(f'📝 Mode: FULLY INDEPENDENT (no inter-tab communication)', Colors.CYAN)}")
         print(f"{colored_text(f'👥 Expected total accounts: {expected_accounts}', Colors.CYAN)}")
-        print(f"{colored_text(f'🔂 Running infinite cycles with {cycle_delay//60} minute intervals', Colors.CYAN)}")
+        # Handle cycle_delay as range or single value
+        import random
+        if isinstance(cycle_delay, (tuple, list)) and len(cycle_delay) == 2:
+            cycle_delay_min, cycle_delay_max = cycle_delay
+            print(f"{colored_text(f'🔂 Running infinite cycles with {cycle_delay_min//60}-{cycle_delay_max//60} minute intervals', Colors.CYAN)}")
+        else:
+            # Backward compatibility for single value
+            cycle_delay_min = cycle_delay_max = cycle_delay if isinstance(cycle_delay, int) else cycle_delay[0]
+            print(f"{colored_text(f'🔂 Running infinite cycles with {cycle_delay_min//60} minute intervals', Colors.CYAN)}")
+        
         print(f"{colored_text(f'📁 Coordination: File-based only via link_hash.json', Colors.CYAN)}")
         
         # Initialize single bot instance for this tab
@@ -100,9 +109,11 @@ def independent_cycle_automation_clean(account_info_list, num_shares=5, share_de
                 
                 # Wait before next cycle
                 if cycle < cycles:
-                    print(f"\n{colored_text(f'⏰ Waiting {cycle_delay//60} minutes before CYCLE {cycle+1}...', Colors.CYAN)}")
+                    # Calculate random delay within range
+                    actual_delay = random.randint(cycle_delay_min, cycle_delay_max)
+                    print(f"\n{colored_text(f'⏰ Waiting {actual_delay//60} minutes before CYCLE {cycle+1}...', Colors.CYAN)}")
                     print(f"{colored_text(f'⛔ Press Ctrl+C to stop Account {account_index}', Colors.YELLOW)}")
-                    time.sleep(cycle_delay)
+                    time.sleep(actual_delay)
                 
                 cycle += 1
                 

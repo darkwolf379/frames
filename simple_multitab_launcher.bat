@@ -30,6 +30,18 @@ if not exist "farcaster_auto_share_like.py" (
 echo ✅ All required files found
 echo.
 
+REM Read startup delay from config.toml
+echo 🔧 Reading startup delay from config.toml...
+for /f "tokens=3" %%i in ('findstr "startup_delay_min" config.toml') do set STARTUP_MIN=%%i
+for /f "tokens=3" %%i in ('findstr "startup_delay_max" config.toml') do set STARTUP_MAX=%%i
+
+REM Default values if not found
+if not defined STARTUP_MIN set STARTUP_MIN=3
+if not defined STARTUP_MAX set STARTUP_MAX=8
+
+echo 📊 Startup delay: %STARTUP_MIN%-%STARTUP_MAX% seconds
+echo.
+
 REM Clean up link_hash.json from previous sessions
 if exist "link_hash.json" (
     echo 🧹 Cleaning up previous session data.
@@ -71,8 +83,9 @@ for /f "usebackq tokens=*" %%a in ("account.txt") do (
         echo ✅ Launching CMD tab for Account !ACCOUNT_NUM!.
         start "Farcaster Account !ACCOUNT_NUM!" cmd /k "cd /d "%CD%" & title Farcaster Account !ACCOUNT_NUM! & mode con cols=120 lines=30 & color 0A & python temp_accounts\launcher_account_!ACCOUNT_NUM!.py"
         
-        REM Wait between launches with random delay (10-30 seconds)
-        set /a "RANDOM_DELAY=10 + !RANDOM! %% 21"
+        REM Wait between launches with config delay
+        set /a "DELAY_RANGE=!STARTUP_MAX! - !STARTUP_MIN! + 1"
+        set /a "RANDOM_DELAY=!STARTUP_MIN! + !RANDOM! %% !DELAY_RANGE!"
         echo ⏳ Waiting !RANDOM_DELAY! seconds before next account.
         timeout /t !RANDOM_DELAY! /nobreak >nul
         
@@ -149,7 +162,8 @@ echo         share_delay_min = config['sharing']['share_delay_min']
 echo         share_delay_max = config['sharing']['share_delay_max']
 echo         like_delay_min = config['liking']['like_delay_min']
 echo         like_delay_max = config['liking']['like_delay_max']
-echo         cycle_delay = config['cycle']['cycle_delay_minutes'] * 60
+echo         cycle_delay_min = config['cycle']['cycle_delay_min_minutes'] * 60
+echo         cycle_delay_max = config['cycle']['cycle_delay_max_minutes'] * 60
 echo         print^(f"✅ Loaded config from config.toml"^)
 echo     except Exception as e:
 echo         print^(f"❌ Error loading config.toml: {e}"^)
@@ -158,7 +172,8 @@ echo         share_delay_min = 10
 echo         share_delay_max = 30
 echo         like_delay_min = 2
 echo         like_delay_max = 5
-echo         cycle_delay = 900
+echo         cycle_delay_min = 480  # 8 minutes default
+echo         cycle_delay_max = 900  # 15 minutes default
 echo.    
 echo     # Load token
 echo     token = load_single_token^(^)
@@ -195,12 +210,12 @@ echo         print^(f"   Original text only: False"^)
 echo         print^(f"   Shares per cycle: {shares_per_cycle}"^)
 echo         print^(f"   Share delay: {share_delay_min}-{share_delay_max}s"^)
 echo         print^(f"   Like delay: {like_delay_min}-{like_delay_max}s"^)
-echo         print^(f"   Cycle delay: {cycle_delay//60} minutes"^)
+echo         print^(f"   Cycle delay: {cycle_delay_min//60}-{cycle_delay_max//60} minutes"^)
 echo.
 echo         # Add random startup delay to avoid simultaneous starts
 echo         import random
 echo         import time
-echo         startup_delay = random.randint^(30, 120^)
+echo         startup_delay = random.randint^(config.get^('advanced', {}^).get^('startup_delay_min', 30^), config.get^('advanced', {}^).get^('startup_delay_max', 120^)^)
 echo         print^(f"⏳ Account %ACC_NUM%: Random startup delay {startup_delay}s for stealth..."^)
 echo         time.sleep^(startup_delay^)
 echo.
@@ -216,7 +231,7 @@ echo             shares_per_cycle,
 echo             ^(share_delay_min, share_delay_max^),
 echo             ^(like_delay_min, like_delay_max^),
 echo             999,
-echo             cycle_delay,
+echo             ^(cycle_delay_min, cycle_delay_max^),
 echo             False,
 echo             True,
 echo             %TOTAL_ACCOUNTS%
