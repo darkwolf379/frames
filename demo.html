@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DexScreener Monitor - DEMO LENGKAP</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: linear-gradient(180deg, #050816 0%, #0A0E27 50%, #050816 100%);
+            color: white;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 32px 16px;
+        }
+
+        header {
+            margin-bottom: 32px;
+            position: relative;
+        }
+
+        .header-top {
+            margin-bottom: 24px;
+        }
+
+        .toast-notification {
+            position: fixed;
+            top: 20px;
+            right: -450px;
+            background: linear-gradient(135deg, rgba(17, 24, 39, 0.98), rgba(17, 24, 39, 0.98));
+            backdrop-filter: blur(10px);
+            border: 2px solid transparent;
+            border-radius: 16px;
+            padding: 20px 24px;
+            max-width: 380px;
+            z-index: 9999;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            overflow: hidden;
+        }
+
+        .toast-notification::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 16px;
+            padding: 2px;
+            background: linear-gradient(135deg, #8338EC, #06FFF0, #FF006E);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            animation: borderRotate 3s linear infinite;
+        }
+
+        @keyframes borderRotate {
+            0% { filter: hue-rotate(0deg); }
+            100% { filter: hue-rotate(360deg); }
+        }
+
+        .toast-notification.show {
+            right: 20px;
+        }
+
+        .toast-notification.hide {
+            right: -450px;
+        }
+
+        .toast-content {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .toast-icon {
+            font-size: 2rem;
+            animation: bellRing 1s ease-in-out infinite;
+            filter: drop-shadow(0 0 10px rgba(6, 255, 240, 0.6));
+        }
+
+        @keyframes bellRing {
+            0%, 100% { transform: rotate(0deg); }
+            10% { transform: rotate(-15deg); }
+            20% { transform: rotate(15deg); }
+            30% { transform: rotate(-15deg); }
+            40% { transform: rotate(15deg); }
+            50% { transform: rotate(0deg); }
+        }
+
+        .toast-text {
+            flex: 1;
+        }
+
+        .toast-title {
+            color: #06FFF0;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+            font-size: 1rem;
+            margin-bottom: 6px;
+            text-shadow: 0 0 10px rgba(6, 255, 240, 0.5);
+            letter-spacing: 0.5px;
+        }
+
+        .toast-message {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+
+        .toast-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .toast-btn {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 600;
+            font-size: 0.75rem;
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .toast-btn-primary {
+            background: linear-gradient(135deg, #8338EC, #06FFF0);
+            color: white;
+            box-shadow: 0 4px 15px rgba(6, 255, 240, 0.3);
+        }
+
+        .toast-btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(6, 255, 240, 0.5);
+        }
+
+        .toast-btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .toast-btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .toast-close {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            opacity: 0.6;
+            transition: all 0.3s;
+            padding: 4px 8px;
+            line-height: 1;
+            border-radius: 6px;
+            z-index: 3;
+        }
+
+        .toast-close:hover {
+            opacity: 1;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        @media (max-width: 768px) {
+            .toast-notification {
+                right: -100%;
+                left: auto;
+                max-width: calc(100% - 40px);
+            }
+            
+            .toast-notification.show {
+                right: 20px;
+            }
+            
+            .toast-notification.hide {
+                right: -100%;
+            }
+        }
+
+        .filters-section {
+            background: linear-gradient(135deg, rgba(10, 14, 39, 0.8), rgba(10, 14, 39, 0.5));
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(6, 255, 240, 0.3);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 32px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .filters-section::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #06FFF0, #FF006E, #8338EC, #06FFF0);
+            border-radius: 16px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: -1;
+            animation: borderAnimation 3s linear infinite;
+            background-size: 400% 400%;
+        }
+
+        @keyframes borderAnimation {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .filters-section:hover::before {
+            opacity: 0.3;
+        }
+
+        .filters-row {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .search-container {
+            position: relative;
+            flex: 1;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #06FFF0;
+            font-size: 1.2rem;
+            pointer-events: none;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .search-input {
+            width: 100%;
+            background: rgba(6, 255, 240, 0.05);
+            border: 2px solid rgba(6, 255, 240, 0.3);
+            color: white;
+            padding: 14px 20px 14px 48px;
+            border-radius: 12px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #06FFF0;
+            background: rgba(6, 255, 240, 0.1);
+            box-shadow: 0 0 20px rgba(6, 255, 240, 0.3), inset 0 0 20px rgba(6, 255, 240, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .search-input::placeholder {
+            color: rgba(6, 255, 240, 0.5);
+            font-weight: 500;
+        }
+
+        .divider {
+            width: 2px;
+            height: 40px;
+            background: linear-gradient(to bottom, transparent, #06FFF0, transparent);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .chain-select-container {
+            position: relative;
+        }
+
+        .chain-label {
+            color: #06FFF0;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+            font-size: 0.75rem;
+            margin-bottom: 6px;
+            display: block;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .chain-select {
+            background: rgba(6, 255, 240, 0.05);
+            border: 2px solid rgba(6, 255, 240, 0.3);
+            color: #06FFF0;
+            padding: 14px 20px;
+            border-radius: 12px;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+            font-size: 0.9rem;
+            cursor: pointer;
+            min-width: 180px;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        .chain-select:focus {
+            outline: none;
+            border-color: #06FFF0;
+            background: rgba(6, 255, 240, 0.1);
+            box-shadow: 0 0 20px rgba(6, 255, 240, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .chain-select:hover {
+            border-color: #06FFF0;
+            background: rgba(6, 255, 240, 0.08);
+        }
+
+        .chain-select option {
+            background: #0A0E27;
+            color: #06FFF0;
+            padding: 10px;
+        }
+
+        h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3rem;
+            font-weight: 900;
+            color: #06FFF0;
+            text-shadow: 0 0 10px #06FFF0;
+        }
+
+        .subtitle {
+            color: rgba(6, 255, 240, 0.7);
+            font-size: 1.125rem;
+            letter-spacing: 0.1em;
+        }
+
+        .token-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 24px;
+        }
+
+        .token-card {
+            background: linear-gradient(135deg, rgba(10, 14, 39, 0.5), rgba(10, 14, 39, 0.3));
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(6, 255, 240, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            position: relative;
+        }
+
+        .token-card:hover {
+            border-color: rgba(6, 255, 240, 0.6);
+            box-shadow: 0 0 30px rgba(6, 255, 240, 0.3);
+            transform: translateY(-2px);
+            transition: all 0.3s ease;
+        }
+
+        .badge {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .badge.new {
+            background: rgba(6, 255, 240, 0.2);
+            border: 1px solid #06FFF0;
+            color: #06FFF0;
+        }
+
+        .badge.boosted {
+            display: none;
+        }
+
+        .token-symbol {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 2px;
+        }
+
+        .token-name {
+            color: #9ca3af;
+            font-size: 0.8rem;
+            margin-bottom: 8px;
+        }
+
+        .token-meta {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 12px;
+            font-size: 0.8rem;
+        }
+
+        .chain-badge {
+            padding: 2px 6px;
+            background: rgba(131, 56, 236, 0.2);
+            border: 1px solid rgba(131, 56, 236, 0.5);
+            border-radius: 4px;
+            color: #8338EC;
+            font-weight: 700;
+            font-size: 0.7rem;
+        }
+
+        .price-section {
+            margin-bottom: 12px;
+        }
+
+        .price-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .token-price {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: white;
+        }
+
+        .price-change {
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .price-change.positive {
+            color: #22c55e;
+        }
+
+        .price-change.negative {
+            color: #ef4444;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .stat-box {
+            background: rgba(10, 14, 39, 0.3);
+            border-radius: 6px;
+            padding: 8px;
+        }
+
+        .stat-label {
+            color: #9ca3af;
+            font-size: 0.65rem;
+            margin-bottom: 2px;
+        }
+
+        .stat-value {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #06FFF0;
+        }
+
+        .stat-box.green {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .stat-box.green .stat-label {
+            color: #22c55e;
+        }
+
+        .stat-box.green .stat-value {
+            color: #22c55e;
+            font-size: 1.2rem;
+        }
+
+        .stat-box.red {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .stat-box.red .stat-label {
+            color: #ef4444;
+        }
+
+        .stat-box.red .stat-value {
+            color: #ef4444;
+            font-size: 1.2rem;
+        }
+
+        .stat-value.purple {
+            color: #a78bfa;
+        }
+
+        .dex-link {
+            display: block;
+            text-align: center;
+            padding: 8px;
+            background: transparent;
+            border: 2px solid #06FFF0;
+            border-radius: 6px;
+            color: #06FFF0;
+            text-decoration: none;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+            font-size: 0.8rem;
+            transition: all 0.3s ease;
+        }
+
+        .dex-link:hover {
+            background: #06FFF0;
+            color: #0A0E27;
+            box-shadow: 0 0 20px rgba(6, 255, 240, 0.5);
+        }
+
+        @media (max-width: 768px) {
+            .token-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Toast Notification -->
+        <div id="toastNotification" class="toast-notification">
+            <button class="toast-close" onclick="closeToast()">×</button>
+            <div class="toast-content">
+                <div class="toast-icon">🔔</div>
+                <div class="toast-text">
+                    <div class="toast-title">Get Real-Time Alerts!</div>
+                    <div class="toast-message">Add Mini Apps to receive instant notifications every time a new token is detected</div>
+                    <div class="toast-actions">
+                        <button class="toast-btn toast-btn-primary" onclick="alert('Redirect to Farcaster Mini Apps')">Add Now</button>
+                        <button class="toast-btn toast-btn-secondary" onclick="closeToast()">Later</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <header>
+            <div class="header-top">
+                <div class="header-content">
+                    <div class="header-left">
+                        <h1>NEWTOKENALERT</h1>
+                        <p class="subtitle">Advanced Token Discovery Platform</p>
+                        <p style="color: #9ca3af; font-size: 0.85rem; margin-top: 8px; line-height: 1.6;">
+                            Real-time monitoring of newly created tokens when developers establish their profile on DexScreener. 
+                            Track tokens across all major chains with comprehensive analytics: MC, FDV, Liquidity, Volume & 24h trading activity.
+                            <span style="color: #06FFF0; font-weight: 600; margin-left: 8px;">More features coming soon!</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Filters Section -->
+        <div class="filters-section">
+            <div class="filters-row">
+                <div class="search-container">
+                    <div class="search-icon">🔍</div>
+                    <input 
+                        type="text" 
+                        id="searchInput" 
+                        class="search-input" 
+                        placeholder="Search token by name, symbol, or contract address..."
+                        onkeyup="filterTokens()"
+                    >
+                </div>
+                <div class="divider"></div>
+                <div class="chain-select-container">
+                    <label class="chain-label">⛓️ Chain Filter</label>
+                    <select id="chainSelect" class="chain-select" onchange="filterTokens()">
+                        <option value="all">🌐 All Chains</option>
+                        <option value="solana">◎ Solana</option>
+                        <option value="base">🔵 Base</option>
+                        <option value="ethereum">⟠ Ethereum</option>
+                        <option value="bsc">🟡 BSC</option>
+                        <option value="arbitrum">🔷 Arbitrum</option>
+                        <option value="polygon">🟣 Polygon</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="token-grid" id="tokenGrid">
+            <!-- Token 1 - NEW -->
+            <div class="token-card">
+                <div class="badge new">✨ NEW</div>
+                
+                <div class="token-symbol">CPT</div>
+                <div class="token-name">Cyber Punk Token</div>
+                
+                <div class="token-meta">
+                    <span class="chain-badge">solana</span>
+                    <span style="color: #9ca3af;">· Raydium · ⏱️ 2m</span>
+                </div>
+
+                <div class="price-section">
+                    <div class="price-row">
+                        <span class="token-price">$0.000123</span>
+                        <span class="price-change positive">📈 +156.70%</span>
+                    </div>
+                </div>
+
+                <!-- 4 Stats Utama -->
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">💧 Liquidity</div>
+                        <div class="stat-value">$45.2K</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">📈 Volume 24h</div>
+                        <div class="stat-value">$234.5K</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">📦 Market Cap</div>
+                        <div class="stat-value purple">$125.5K</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">🎯 FDV</div>
+                        <div class="stat-value purple">$1.2M</div>
+                    </div>
+                </div>
+
+                <!-- Buys/Sells -->
+                <div class="stats-grid">
+                    <div class="stat-box green">
+                        <div class="stat-label">📈 Buys 24h</div>
+                        <div class="stat-value">45</div>
+                    </div>
+                    <div class="stat-box red">
+                        <div class="stat-label">📉 Sells 24h</div>
+                        <div class="stat-value">23</div>
+                    </div>
+                </div>
+
+                <a href="https://dexscreener.com/solana/4Hx49kM92DZ4TNKkYAC2ocfDzNBEeDmdyYGBmHWkpump" target="_blank" class="dex-link">
+                    🔗 DEXSCREENER
+                </a>
+            </div>
+
+            <!-- Token 2 - BOOSTED -->
+            <div class="token-card">
+                <div class="badge boosted">🚀 BOOSTED</div>
+                
+                <div class="token-symbol">NEON</div>
+                <div class="token-name">Neon Dreams</div>
+                
+                <div class="token-meta">
+                    <span class="chain-badge">solana</span>
+                    <span style="color: #9ca3af;">· Orca · ⏱️ 15m</span>
+                </div>
+
+                <div class="price-section">
+                    <div class="price-row">
+                        <span class="token-price">$0.00456</span>
+                        <span class="price-change positive">📈 +89.30%</span>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">💧 Liquidity</div>
+                        <div class="stat-value">$123.4K</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">📈 Volume 24h</div>
+                        <div class="stat-value">$567.8K</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">📦 Market Cap</div>
+                        <div class="stat-value purple">$890.3K</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">🎯 FDV</div>
+                        <div class="stat-value purple">$3.5M</div>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-box green">
+                        <div class="stat-label">📈 Buys 24h</div>
+                        <div class="stat-value">128</div>
+                    </div>
+                    <div class="stat-box red">
+                        <div class="stat-label">📉 Sells 24h</div>
+                        <div class="stat-value">67</div>
+                    </div>
+                </div>
+
+                <a href="https://dexscreener.com/solana/FXqbuoF4Pg6wWSmeMP3Qp6WVy8fzivqxgSgZYT9AvW2S" target="_blank" class="dex-link">
+                    🔗 DEXSCREENER
+                </a>
+            </div>
+
+            <!-- Token 3 - NEW -->
+            <div class="token-card">
+                <div class="badge new">✨ NEW</div>
+                
+                <div class="token-symbol">MTX</div>
+                <div class="token-name">Matrix Protocol</div>
+                
+                <div class="token-meta">
+                    <span class="chain-badge">base</span>
+                    <span style="color: #9ca3af;">· Uniswap · ⏱️ 1h</span>
+                </div>
+
+                <div class="price-section">
+                    <div class="price-row">
+                        <span class="token-price">$0.0789</span>
+                        <span class="price-change negative">📉 -12.40%</span>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">💧 Liquidity</div>
+                        <div class="stat-value">$78.9K</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">📈 Volume 24h</div>
+                        <div class="stat-value">$156.2K</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">📦 Market Cap</div>
+                        <div class="stat-value purple">$456.7K</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">🎯 FDV</div>
+                        <div class="stat-value purple">$2.1M</div>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-box green">
+                        <div class="stat-label">📈 Buys 24h</div>
+                        <div class="stat-value">89</div>
+                    </div>
+                    <div class="stat-box red">
+                        <div class="stat-label">📉 Sells 24h</div>
+                        <div class="stat-value">102</div>
+                    </div>
+                </div>
+
+                <a href="https://dexscreener.com/base/0x1234567890abcdef1234567890abcdef12345678" target="_blank" class="dex-link">
+                    🔗 DEXSCREENER
+                </a>
+            </div>
+
+            <!-- Token 4 - BOOSTED -->
+            <div class="token-card">
+                <div class="badge boosted">🚀 BOOSTED</div>
+                
+                <div class="token-symbol">GHOST</div>
+                <div class="token-name">Ghost Shell</div>
+                
+                <div class="token-meta">
+                    <span class="chain-badge">solana</span>
+                    <span style="color: #9ca3af;">· Pumpswap · ⏱️ 5m</span>
+                </div>
+
+                <div class="price-section">
+                    <div class="price-row">
+                        <span class="token-price">$0.00234</span>
+                        <span class="price-change positive">📈 +234.50%</span>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">💧 Liquidity</div>
+                        <div class="stat-value">$234.5K</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">📈 Volume 24h</div>
+                        <div class="stat-value">$890.1K</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">📦 Market Cap</div>
+                        <div class="stat-value purple">$678.9K</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">🎯 FDV</div>
+                        <div class="stat-value purple">$4.2M</div>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-box green">
+                        <div class="stat-label">📈 Buys 24h</div>
+                        <div class="stat-value">156</div>
+                    </div>
+                    <div class="stat-box red">
+                        <div class="stat-label">📉 Sells 24h</div>
+                        <div class="stat-value">45</div>
+                    </div>
+                </div>
+
+                <a href="https://dexscreener.com/solana/GST123456789abcdef1234567890abcdef123456" target="_blank" class="dex-link">
+                    🔗 DEXSCREENER
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Mock data dengan berbagai chain
+        const allTokens = [
+            {
+                symbol: 'CPT',
+                name: 'Cyber Punk Token',
+                chain: 'solana',
+                dex: 'Raydium',
+                age: '2m',
+                price: '$0.000123',
+                change: 156.70,
+                liquidity: '$45.2K',
+                volume: '$234.5K',
+                marketCap: '$125.5K',
+                fdv: '$1.2M',
+                buys: 45,
+                sells: 23,
+                address: '4Hx49kM92DZ4TNKkYAC2ocfDzNBEeDmdyYGBmHWkpump'
+            },
+            {
+                symbol: 'NEON',
+                name: 'Neon Dreams',
+                chain: 'solana',
+                dex: 'Orca',
+                age: '15m',
+                price: '$0.00456',
+                change: 89.30,
+                liquidity: '$123.4K',
+                volume: '$567.8K',
+                marketCap: '$890.3K',
+                fdv: '$3.5M',
+                buys: 128,
+                sells: 67,
+                address: 'FXqbuoF4Pg6wWSmeMP3Qp6WVy8fzivqxgSgZYT9AvW2S'
+            },
+            {
+                symbol: 'MTX',
+                name: 'Matrix Protocol',
+                chain: 'base',
+                dex: 'Uniswap',
+                age: '1h',
+                price: '$0.0789',
+                change: -12.40,
+                liquidity: '$78.9K',
+                volume: '$156.2K',
+                marketCap: '$456.7K',
+                fdv: '$2.1M',
+                buys: 89,
+                sells: 102,
+                address: '0x1234567890abcdef1234567890abcdef12345678'
+            },
+            {
+                symbol: 'GHOST',
+                name: 'Ghost Shell',
+                chain: 'solana',
+                dex: 'Pumpswap',
+                age: '5m',
+                price: '$0.00234',
+                change: 234.50,
+                liquidity: '$234.5K',
+                volume: '$890.1K',
+                marketCap: '$678.9K',
+                fdv: '$4.2M',
+                buys: 156,
+                sells: 45,
+                address: 'GST123456789abcdef1234567890abcdef123456'
+            },
+            {
+                symbol: 'ETH2',
+                name: 'Ethereum 2.0 Token',
+                chain: 'ethereum',
+                dex: 'Uniswap',
+                age: '30m',
+                price: '$0.123',
+                change: 45.20,
+                liquidity: '$567.8K',
+                volume: '$1.2M',
+                marketCap: '$2.3M',
+                fdv: '$10M',
+                buys: 234,
+                sells: 156,
+                address: '0xabcdef1234567890abcdef1234567890abcdef12'
+            },
+            {
+                symbol: 'POLY',
+                name: 'Polygon Gem',
+                chain: 'polygon',
+                dex: 'QuickSwap',
+                age: '1h',
+                price: '$0.0456',
+                change: 78.90,
+                liquidity: '$234.5K',
+                volume: '$678.9K',
+                marketCap: '$1.5M',
+                fdv: '$5.6M',
+                buys: 178,
+                sells: 89,
+                address: '0x9876543210fedcba9876543210fedcba98765432'
+            }
+        ];
+
+        function renderTokenCard(token) {
+            const isPositive = token.change > 0;
+            const changeEmoji = isPositive ? '📈' : '📉';
+            const changeClass = isPositive ? 'positive' : 'negative';
+            
+            return `
+                <div class="token-card" data-chain="${token.chain}" data-symbol="${token.symbol.toLowerCase()}" data-name="${token.name.toLowerCase()}" data-address="${token.address.toLowerCase()}">
+                    <div class="badge new">📡 NEW</div>
+                    
+                    <div class="token-symbol">${token.symbol}</div>
+                    <div class="token-name">${token.name}</div>
+                    
+                    <div class="token-meta">
+                        <span class="chain-badge">${token.chain}</span>
+                        <span style="color: #9ca3af;">· ${token.dex} · ⏱️ ${token.age}</span>
+                    </div>
+
+                    <div class="price-section">
+                        <div class="price-row">
+                            <span class="token-price">${token.price}</span>
+                            <span class="price-change ${changeClass}">${changeEmoji} ${isPositive ? '+' : ''}${token.change.toFixed(2)}%</span>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <div class="stat-label">💧 Liquidity</div>
+                            <div class="stat-value">${token.liquidity}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">📈 Volume 24h</div>
+                            <div class="stat-value">${token.volume}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">📦 Market Cap</div>
+                            <div class="stat-value purple">${token.marketCap}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">🎯 FDV</div>
+                            <div class="stat-value purple">${token.fdv}</div>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-box green">
+                            <div class="stat-label">📈 Buys 24h</div>
+                            <div class="stat-value">${token.buys}</div>
+                        </div>
+                        <div class="stat-box red">
+                            <div class="stat-label">📉 Sells 24h</div>
+                            <div class="stat-value">${token.sells}</div>
+                        </div>
+                    </div>
+
+                    <a href="https://dexscreener.com/${token.chain}/${token.address}" target="_blank" class="dex-link">
+                        🔗 DEXSCREENER
+                    </a>
+                </div>
+            `;
+        }
+
+        function renderAllTokens() {
+            const grid = document.getElementById('tokenGrid');
+            grid.innerHTML = allTokens.map(token => renderTokenCard(token)).join('');
+        }
+
+        function filterTokens() {
+            const searchValue = document.getElementById('searchInput').value.toLowerCase();
+            const chainValue = document.getElementById('chainSelect').value;
+            const grid = document.getElementById('tokenGrid');
+            
+            const filteredTokens = allTokens.filter(token => {
+                const matchesSearch = searchValue === '' || 
+                    token.symbol.toLowerCase().includes(searchValue) ||
+                    token.name.toLowerCase().includes(searchValue) ||
+                    token.address.toLowerCase().includes(searchValue);
+                
+                const matchesChain = chainValue === 'all' || token.chain === chainValue;
+                
+                return matchesSearch && matchesChain;
+            });
+            
+            if (filteredTokens.length === 0) {
+                grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 60px 20px; color: #9ca3af; font-family: Orbitron, sans-serif;">No tokens found</div>';
+            } else {
+                grid.innerHTML = filteredTokens.map(token => renderTokenCard(token)).join('');
+            }
+        }
+
+        // Toast notification functions
+        function showToast() {
+            const toast = document.getElementById('toastNotification');
+            toast.classList.add('show');
+            toast.classList.remove('hide');
+        }
+
+        function closeToast() {
+            const toast = document.getElementById('toastNotification');
+            toast.classList.add('hide');
+            toast.classList.remove('show');
+        }
+
+        // Initial render
+        renderAllTokens();
+        
+        // Show toast notification after 1.5 seconds
+        setTimeout(showToast, 1500);
+    </script>
+</body>
+</html>
